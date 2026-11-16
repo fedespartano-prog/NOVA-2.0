@@ -32,18 +32,21 @@ public class MainActivity extends Activity {
 
     private static final int AUDIO_PERMISSION = 100;
 
-    private SpeechRecognizer recognizer;
-    private TextToSpeech textToSpeech;
     private APIKeyStore keyStore;
     private AIManager aiManager;
 
+    private SpeechRecognizer recognizer;
+    private TextToSpeech textToSpeech;
+
     private TextView status;
     private TextView recognizedText;
+
     private Button listenButton;
 
     private EditText openAIInput;
     private EditText deepSeekInput;
     private EditText geminiInput;
+
     private Spinner providerSpinner;
 
     private boolean ttsReady = false;
@@ -59,94 +62,20 @@ public class MainActivity extends Activity {
 
         textToSpeech = new TextToSpeech(this, result -> {
             if (result == TextToSpeech.SUCCESS) {
-                int languageResult =
-                        textToSpeech.setLanguage(Locale.ITALIAN);
+                int language = textToSpeech.setLanguage(Locale.ITALIAN);
 
                 ttsReady =
-                        languageResult != TextToSpeech.LANG_MISSING_DATA
-                        && languageResult != TextToSpeech.LANG_NOT_SUPPORTED;
+                        language != TextToSpeech.LANG_MISSING_DATA
+                        && language != TextToSpeech.LANG_NOT_SUPPORTED;
             }
         });
 
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            status.setText(
-                    "Riconoscimento vocale non disponibile."
-            );
-            listenButton.setEnabled(false);
-            return;
-        }
-
-        recognizer =
-                SpeechRecognizer.createSpeechRecognizer(this);
-
-        recognizer.setRecognitionListener(
-                new RecognitionListener() {
-
-            @Override
-            public void onReadyForSpeech(Bundle params) {
-                status.setText("NOVA ti sta ascoltando...");
-            }
-
-            @Override
-            public void onBeginningOfSpeech() {
-                status.setText("Ti sto ascoltando...");
-            }
-
-            @Override
-            public void onRmsChanged(float rmsdB) {
-            }
-
-            @Override
-            public void onBufferReceived(byte[] buffer) {
-            }
-
-            @Override
-            public void onEndOfSpeech() {
-                status.setText("Invio all'intelligenza artificiale...");
-            }
-
-            @Override
-            public void onError(int error) {
-                status.setText(
-                        "Non ho riconosciuto la voce. Riprova."
-                );
-                listenButton.setEnabled(true);
-            }
-
-            @Override
-            public void onResults(Bundle results) {
-
-                ArrayList<String> matches =
-                        results.getStringArrayList(
-                                SpeechRecognizer.RESULTS_RECOGNITION
-                        );
-
-                if (matches != null && !matches.isEmpty()) {
-                    String phrase = matches.get(0);
-                    recognizedText.setText("Tu: " + phrase);
-
-                    sendToAI(phrase);
-                } else {
-                    status.setText("Non ho capito. Riprova.");
-                    listenButton.setEnabled(true);
-                }
-            }
-
-            @Override
-            public void onPartialResults(Bundle partialResults) {
-            }
-
-            @Override
-            public void onEvent(int eventType, Bundle params) {
-            }
-        });
-
-        listenButton.setOnClickListener(v -> startListening());
+        initializeSpeech();
     }
 
     private void createInterface() {
 
-        ScrollView scrollView = new ScrollView(this);
+        ScrollView scroll = new ScrollView(this);
 
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -154,42 +83,25 @@ public class MainActivity extends Activity {
         layout.setPadding(32, 32, 32, 32);
         layout.setBackgroundColor(0xFF0A0A19);
 
-        TextView title = new TextView(this);
-        title.setText("NOVA 2.0");
-        title.setTextColor(0xFFFFFFFF);
+        TextView title = createLabel("NOVA 2.0");
         title.setTextSize(34);
         title.setGravity(Gravity.CENTER);
 
-        TextView subtitle = new TextView(this);
-        subtitle.setText("Personal AI Assistant");
-        subtitle.setTextColor(0xFFCCCCCC);
-        subtitle.setTextSize(17);
-        subtitle.setGravity(Gravity.CENTER);
-
-        status = new TextView(this);
-        status.setText("NOVA pronta");
-        status.setTextColor(0xFFFFFFFF);
+        status = createLabel("NOVA pronta");
         status.setTextSize(18);
         status.setGravity(Gravity.CENTER);
-        status.setPadding(0, 30, 0, 20);
 
-        recognizedText = new TextView(this);
-        recognizedText.setText("Premi il pulsante e parla");
-        recognizedText.setTextColor(0xFFFFFFFF);
-        recognizedText.setTextSize(16);
+        recognizedText = createLabel("Premi il pulsante e parla");
         recognizedText.setGravity(Gravity.CENTER);
-        recognizedText.setPadding(0, 20, 0, 25);
 
         listenButton = new Button(this);
         listenButton.setText("PARLA CON NOVA");
+        listenButton.setOnClickListener(v -> startListening());
 
-        TextView settingsTitle = new TextView(this);
-        settingsTitle.setText("CONFIGURAZIONE INTELLIGENZA ARTIFICIALE");
-        settingsTitle.setTextColor(0xFFFFFFFF);
-        settingsTitle.setTextSize(17);
-        settingsTitle.setPadding(0, 35, 0, 15);
+        TextView settings = createLabel(
+                "CONFIGURAZIONE INTELLIGENZA ARTIFICIALE"
+        );
 
-        TextView providerLabel = createLabel("Provider preferito");
         providerSpinner = new Spinner(this);
 
         String[] providers = {
@@ -198,12 +110,11 @@ public class MainActivity extends Activity {
                 "GEMINI"
         };
 
-        ArrayAdapter<String> adapter =
-                new ArrayAdapter<>(
-                        this,
-                        android.R.layout.simple_spinner_item,
-                        providers
-                );
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_item,
+                providers
+        );
 
         adapter.setDropDownViewResource(
                 android.R.layout.simple_spinner_dropdown_item
@@ -220,37 +131,43 @@ public class MainActivity extends Activity {
         saveButton.setOnClickListener(v -> saveAIConfiguration());
 
         layout.addView(title);
-        layout.addView(subtitle);
         layout.addView(status);
         layout.addView(recognizedText);
         layout.addView(listenButton);
 
-        layout.addView(settingsTitle);
-        layout.addView(providerLabel);
+        layout.addView(settings);
+        layout.addView(createLabel("Provider preferito"));
         layout.addView(providerSpinner);
+
         layout.addView(openAIInput);
         layout.addView(deepSeekInput);
         layout.addView(geminiInput);
         layout.addView(saveButton);
 
-        scrollView.addView(layout);
-        setContentView(scrollView);
+        scroll.addView(layout);
+        setContentView(scroll);
     }
 
-    private TextView createLabel(String text) {
+    private TextView createLabel(String value) {
+
         TextView label = new TextView(this);
-        label.setText(text);
+
+        label.setText(value);
         label.setTextColor(0xFFFFFFFF);
-        label.setTextSize(15);
-        label.setPadding(0, 12, 0, 5);
+        label.setTextSize(16);
+        label.setPadding(0, 15, 0, 15);
+
         return label;
     }
 
     private EditText createKeyInput(String hint) {
+
         EditText input = new EditText(this);
+
         input.setHint(hint);
         input.setSingleLine(true);
         input.setTextSize(14);
+
         input.setInputType(
                 android.text.InputType.TYPE_CLASS_TEXT
                 | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -269,6 +186,7 @@ public class MainActivity extends Activity {
     private void loadAIConfiguration() {
 
         try {
+
             String selected = keyStore.getSelectedProvider();
 
             String[] providers = {
@@ -278,17 +196,28 @@ public class MainActivity extends Activity {
             };
 
             for (int i = 0; i < providers.length; i++) {
+
                 if (providers[i].equalsIgnoreCase(selected)) {
                     providerSpinner.setSelection(i);
                     break;
                 }
             }
 
+            String openAI = keyStore.getKey("OPENAI");
+            String deepSeek = keyStore.getKey("DEEPSEEK");
+            String gemini = keyStore.getKey("GEMINI");
+
+            openAIInput.setText(openAI == null ? "" : openAI);
+            deepSeekInput.setText(deepSeek == null ? "" : deepSeek);
+            geminiInput.setText(gemini == null ? "" : gemini);
+
             rebuildAIManager();
 
         } catch (Exception e) {
+
             status.setText(
-                    "Errore nel caricamento della configurazione."
+                    "Errore caricamento configurazione: "
+                    + e.getMessage()
             );
         }
     }
@@ -296,37 +225,30 @@ public class MainActivity extends Activity {
     private void saveAIConfiguration() {
 
         try {
-            if (!openAIInput.getText().toString().trim().isEmpty()) {
-                keyStore.saveKey(
-                        "OPENAI",
-                        openAIInput.getText().toString()
-                );
+
+            String openAI = openAIInput.getText().toString().trim();
+            String deepSeek = deepSeekInput.getText().toString().trim();
+            String gemini = geminiInput.getText().toString().trim();
+
+            if (!openAI.isEmpty()) {
+                keyStore.saveKey("OPENAI", openAI);
             }
 
-            if (!deepSeekInput.getText().toString().trim().isEmpty()) {
-                keyStore.saveKey(
-                        "DEEPSEEK",
-                        deepSeekInput.getText().toString()
-                );
+            if (!deepSeek.isEmpty()) {
+                keyStore.saveKey("DEEPSEEK", deepSeek);
             }
 
-            if (!geminiInput.getText().toString().trim().isEmpty()) {
-                keyStore.saveKey(
-                        "GEMINI",
-                        geminiInput.getText().toString()
-                );
+            if (!gemini.isEmpty()) {
+                keyStore.saveKey("GEMINI", gemini);
             }
 
-            String selected =
-                    providerSpinner.getSelectedItem().toString();
+            String selected = providerSpinner
+                    .getSelectedItem()
+                    .toString();
 
             keyStore.setSelectedProvider(selected);
 
             rebuildAIManager();
-
-            openAIInput.setText("");
-            deepSeekInput.setText("");
-            geminiInput.setText("");
 
             Toast.makeText(
                     this,
@@ -335,70 +257,119 @@ public class MainActivity extends Activity {
             ).show();
 
         } catch (Exception e) {
+
             status.setText(
-                    "Errore nel salvataggio delle chiavi API."
+                    "Errore salvataggio: " + e.getMessage()
             );
+
+            Toast.makeText(
+                    this,
+                    "Salvataggio non riuscito.",
+                    Toast.LENGTH_LONG
+            ).show();
         }
     }
 
     private void rebuildAIManager() throws Exception {
 
-        String openAIKey = keyStore.getKey("OPENAI");
-        String deepSeekKey = keyStore.getKey("DEEPSEEK");
-        String geminiKey = keyStore.getKey("GEMINI");
+        String openAI = keyStore.getKey("OPENAI");
+        String deepSeek = keyStore.getKey("DEEPSEEK");
+        String gemini = keyStore.getKey("GEMINI");
 
         String selected = keyStore.getSelectedProvider();
 
         aiManager = AIProviderFactory.createManager(
                 selected,
-                openAIKey,
-                deepSeekKey,
-                geminiKey
+                openAI,
+                deepSeek,
+                gemini
         );
 
         if (aiManager.isProviderAvailable()) {
+
             status.setText(
                     "NOVA pronta - "
                     + aiManager.getProvider().getProviderName()
             );
+
         } else {
+
             status.setText(
-                    "Configura una chiave API per iniziare."
+                    "Inserisci una chiave API valida."
             );
         }
     }
 
-    private void sendToAI(String phrase) {
+    private void initializeSpeech() {
 
-        if (aiManager == null || !aiManager.isProviderAvailable()) {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+
             status.setText(
-                    "Nessuna AI configurata. Inserisci una chiave API."
+                    "Riconoscimento vocale non disponibile."
             );
-            listenButton.setEnabled(true);
+
+            listenButton.setEnabled(false);
             return;
         }
 
-        status.setText("NOVA sta pensando...");
+        recognizer = SpeechRecognizer.createSpeechRecognizer(this);
 
-        aiManager.sendMessage(
-                phrase,
-                new com.novatwo.assistant.ai.AIProvider.ResponseCallback() {
+        recognizer.setRecognitionListener(new RecognitionListener() {
 
             @Override
-            public void onSuccess(String response) {
-                status.setText("NOVA ha risposto");
-                recognizedText.setText("NOVA: " + response);
-                speak(response);
+            public void onReadyForSpeech(Bundle params) {
+                status.setText("NOVA ti sta ascoltando...");
+            }
+
+            @Override
+            public void onBeginningOfSpeech() {
+                status.setText("Ti sto ascoltando...");
+            }
+
+            @Override
+            public void onRmsChanged(float value) {}
+
+            @Override
+            public void onBufferReceived(byte[] buffer) {}
+
+            @Override
+            public void onEndOfSpeech() {
+                status.setText("Invio all'intelligenza artificiale...");
+            }
+
+            @Override
+            public void onError(int error) {
+                status.setText("Riprova a parlare.");
                 listenButton.setEnabled(true);
             }
 
             @Override
-            public void onError(String error) {
-                status.setText("Errore durante la richiesta AI");
-                recognizedText.setText(error);
-                speak("Si è verificato un errore.");
-                listenButton.setEnabled(true);
+            public void onResults(Bundle results) {
+
+                ArrayList<String> matches = results.getStringArrayList(
+                        SpeechRecognizer.RESULTS_RECOGNITION
+                );
+
+                if (matches != null && !matches.isEmpty()) {
+
+                    String phrase = matches.get(0);
+
+                    recognizedText.setText("Tu: " + phrase);
+
+                    sendToAI(phrase);
+
+                } else {
+
+                    status.setText("Non ho capito.");
+                    listenButton.setEnabled(true);
+                }
             }
+
+            @Override
+            public void onPartialResults(Bundle results) {}
+
+            @Override
+            public void onEvent(int eventType, Bundle params) {}
         });
     }
 
@@ -411,6 +382,7 @@ public class MainActivity extends Activity {
                     new String[]{Manifest.permission.RECORD_AUDIO},
                     AUDIO_PERMISSION
             );
+
             return;
         }
 
@@ -433,11 +405,6 @@ public class MainActivity extends Activity {
         );
 
         intent.putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,
-                "it-IT"
-        );
-
-        intent.putExtra(
                 RecognizerIntent.EXTRA_MAX_RESULTS,
                 1
         );
@@ -446,8 +413,58 @@ public class MainActivity extends Activity {
         recognizer.startListening(intent);
     }
 
+    private void sendToAI(String phrase) {
+
+        if (aiManager == null || !aiManager.isProviderAvailable()) {
+
+            status.setText("Nessuna AI configurata.");
+            listenButton.setEnabled(true);
+            return;
+        }
+
+        status.setText("NOVA sta pensando...");
+
+        aiManager.sendMessage(
+                phrase,
+                new com.novatwo.assistant.ai.AIProvider.ResponseCallback() {
+
+                    @Override
+                    public void onSuccess(String response) {
+
+                        runOnUiThread(() -> {
+
+                            status.setText("NOVA ha risposto");
+
+                            recognizedText.setText(
+                                    "NOVA: " + response
+                            );
+
+                            speak(response);
+
+                            listenButton.setEnabled(true);
+                        });
+                    }
+
+                    @Override
+                    public void onError(String error) {
+
+                        runOnUiThread(() -> {
+
+                            status.setText("Errore richiesta AI");
+
+                            recognizedText.setText(error);
+
+                            listenButton.setEnabled(true);
+                        });
+                    }
+                }
+        );
+    }
+
     private void speak(String message) {
+
         if (ttsReady && textToSpeech != null) {
+
             textToSpeech.speak(
                     message,
                     TextToSpeech.QUEUE_FLUSH,
@@ -476,6 +493,7 @@ public class MainActivity extends Activity {
             startListening();
 
         } else {
+
             status.setText("Permesso microfono non concesso.");
             listenButton.setEnabled(true);
         }
