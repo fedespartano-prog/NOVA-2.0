@@ -8,15 +8,20 @@
     <!-- Microfono -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Riconoscimento vocale -->
+    <!-- Stato della connessione -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Il microfono non è obbligatorio per installare NOVA -->
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
 
     <application
         android:allowBackup="false"
         android:label="NOVA 2.0"
         android:usesCleartextTraffic="false"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@android:style/Theme.Material.NoActionBar">
 
         <activity
             android:name="com.novatwo.assistant.MainActivity"
