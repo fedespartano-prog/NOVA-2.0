@@ -1,45 +1,43 @@
 
 package com.novatwo.assistant.ai;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 public final class AIProviderRouter {
 
     private AIProviderRouter() {
-        // Classe di utilità.
     }
 
     public static AIProvider selectProvider(
             String preferredProvider,
             AIProvider openAI,
-            AIProvider deepSeek
-    ) {
+            AIProvider deepSeek,
+            AIProvider gemini) {
 
-        if (preferredProvider == null) {
-            return firstAvailable(openAI, deepSeek);
+        Map<String, AIProvider> providers =
+                new LinkedHashMap<>();
+
+        providers.put("OPENAI", openAI);
+        providers.put("DEEPSEEK", deepSeek);
+        providers.put("GEMINI", gemini);
+
+        if (preferredProvider != null) {
+            AIProvider preferred = providers.get(
+                    preferredProvider.trim().toUpperCase()
+            );
+
+            if (preferred != null) {
+                return preferred;
+            }
         }
 
-        String preference =
-                preferredProvider.trim().toUpperCase();
-
-        if (preference.equals("OPENAI")) {
-            return firstAvailable(openAI, deepSeek);
+        for (AIProvider provider : providers.values()) {
+            if (provider != null) {
+                return provider;
+            }
         }
 
-        if (preference.equals("DEEPSEEK")) {
-            return firstAvailable(deepSeek, openAI);
-        }
-
-        return firstAvailable(openAI, deepSeek);
-    }
-
-    private static AIProvider firstAvailable(
-            AIProvider first,
-            AIProvider second
-    ) {
-
-        if (first != null) {
-            return first;
-        }
-
-        return second;
+        return null;
     }
 }
