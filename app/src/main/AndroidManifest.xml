@@ -2,16 +2,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Connessione Internet -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Microfono -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Stato della connessione -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Il microfono non è obbligatorio per installare NOVA -->
     <uses-feature
         android:name="android.hardware.microphone"
         android:required="false" />
