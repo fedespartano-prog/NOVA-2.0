@@ -43,8 +43,6 @@ public class MainActivity extends Activity {
 
     private Button listenButton;
 
-    private EditText openAIInput;
-    private EditText deepSeekInput;
     private EditText geminiInput;
 
     private Spinner providerSpinner;
@@ -105,8 +103,7 @@ public class MainActivity extends Activity {
         providerSpinner = new Spinner(this);
 
         String[] providers = {
-                "OPENAI",
-                "DEEPSEEK",
+                "AUTO",
                 "GEMINI"
         };
 
@@ -122,8 +119,6 @@ public class MainActivity extends Activity {
 
         providerSpinner.setAdapter(adapter);
 
-        openAIInput = createKeyInput("Chiave API OpenAI");
-        deepSeekInput = createKeyInput("Chiave API DeepSeek");
         geminiInput = createKeyInput("Chiave API Gemini");
 
         Button saveButton = new Button(this);
@@ -139,8 +134,6 @@ public class MainActivity extends Activity {
         layout.addView(createLabel("Provider preferito"));
         layout.addView(providerSpinner);
 
-        layout.addView(openAIInput);
-        layout.addView(deepSeekInput);
         layout.addView(geminiInput);
         layout.addView(saveButton);
 
@@ -189,27 +182,19 @@ public class MainActivity extends Activity {
 
             String selected = keyStore.getSelectedProvider();
 
-            String[] providers = {
-                    "OPENAI",
-                    "DEEPSEEK",
-                    "GEMINI"
-            };
-
-            for (int i = 0; i < providers.length; i++) {
-
-                if (providers[i].equalsIgnoreCase(selected)) {
-                    providerSpinner.setSelection(i);
-                    break;
-                }
+            if (!"GEMINI".equalsIgnoreCase(selected)) {
+                selected = "AUTO";
             }
 
-            String openAI = keyStore.getKey("OPENAI");
-            String deepSeek = keyStore.getKey("DEEPSEEK");
+            providerSpinner.setSelection(
+                    "GEMINI".equals(selected) ? 1 : 0
+            );
+
             String gemini = keyStore.getKey("GEMINI");
 
-            openAIInput.setText(openAI == null ? "" : openAI);
-            deepSeekInput.setText(deepSeek == null ? "" : deepSeek);
-            geminiInput.setText(gemini == null ? "" : gemini);
+            geminiInput.setText(
+                    gemini == null ? "" : gemini
+            );
 
             rebuildAIManager();
 
@@ -226,17 +211,9 @@ public class MainActivity extends Activity {
 
         try {
 
-            String openAI = openAIInput.getText().toString().trim();
-            String deepSeek = deepSeekInput.getText().toString().trim();
-            String gemini = geminiInput.getText().toString().trim();
-
-            if (!openAI.isEmpty()) {
-                keyStore.saveKey("OPENAI", openAI);
-            }
-
-            if (!deepSeek.isEmpty()) {
-                keyStore.saveKey("DEEPSEEK", deepSeek);
-            }
+            String gemini = geminiInput.getText()
+                    .toString()
+                    .trim();
 
             if (!gemini.isEmpty()) {
                 keyStore.saveKey("GEMINI", gemini);
@@ -272,16 +249,13 @@ public class MainActivity extends Activity {
 
     private void rebuildAIManager() throws Exception {
 
-        String openAI = keyStore.getKey("OPENAI");
-        String deepSeek = keyStore.getKey("DEEPSEEK");
         String gemini = keyStore.getKey("GEMINI");
-
         String selected = keyStore.getSelectedProvider();
 
         aiManager = AIProviderFactory.createManager(
                 selected,
-                openAI,
-                deepSeek,
+                null,
+                null,
                 gemini
         );
 
@@ -295,7 +269,7 @@ public class MainActivity extends Activity {
         } else {
 
             status.setText(
-                    "Inserisci una chiave API valida."
+                    "Inserisci una chiave API Gemini."
             );
         }
     }
