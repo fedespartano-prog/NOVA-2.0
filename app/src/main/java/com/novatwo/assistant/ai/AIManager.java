@@ -82,8 +82,6 @@ public class AIManager {
             return false;
         }
 
-        // Per ora è ammesso soltanto Gemini API
-        // nella modalità gratuita verificata.
         return name.toUpperCase().contains("GEMINI");
     }
 
@@ -110,7 +108,7 @@ public class AIManager {
 
         if (candidates.isEmpty()) {
             callback.onError(
-                    "Nessun provider AI gratuito disponibile o configurato."
+                    "Nessun provider configurato. Controlla la chiave Gemini."
             );
             return;
         }
@@ -126,7 +124,7 @@ public class AIManager {
     ) {
         if (index >= candidates.size()) {
             callback.onError(
-                    "Nessuna AI gratuita disponibile al momento."
+                    "Errore del provider: nessuna risposta valida ricevuta."
             );
             return;
         }
@@ -144,12 +142,26 @@ public class AIManager {
 
                     @Override
                     public void onError(String error) {
-                        tryProvider(
-                                prompt,
-                                callback,
-                                candidates,
-                                index + 1
-                        );
+
+                        String message = error;
+
+                        if (message == null || message.trim().isEmpty()) {
+                            message = "Errore sconosciuto del provider.";
+                        }
+
+                        if (index + 1 >= candidates.size()) {
+                            callback.onError(
+                                    provider.getProviderName()
+                                    + ": " + message
+                            );
+                        } else {
+                            tryProvider(
+                                    prompt,
+                                    callback,
+                                    candidates,
+                                    index + 1
+                            );
+                        }
                     }
                 }
         );
