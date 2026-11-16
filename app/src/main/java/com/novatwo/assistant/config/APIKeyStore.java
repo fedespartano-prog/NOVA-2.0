@@ -20,12 +20,14 @@ public final class APIKeyStore {
     private static final String PREFS = "nova_secure_settings";
     private static final String ALIAS = "NOVA_API_KEYS_AES";
     private static final String SELECTED = "selected_provider";
+    private static final String DEFAULT_PROVIDER = "AUTO";
 
     private final SharedPreferences preferences;
 
     public APIKeyStore(Context context) {
         preferences = context.getSharedPreferences(
-                PREFS, Context.MODE_PRIVATE
+                PREFS,
+                Context.MODE_PRIVATE
         );
     }
 
@@ -64,7 +66,8 @@ public final class APIKeyStore {
     public String getKey(String provider) throws Exception {
 
         String stored = preferences.getString(
-                providerKey(provider), null
+                providerKey(provider),
+                null
         );
 
         if (stored == null || stored.isEmpty()) {
@@ -86,6 +89,7 @@ public final class APIKeyStore {
         );
 
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+
         cipher.init(
                 Cipher.DECRYPT_MODE,
                 getSecretKey(),
@@ -99,23 +103,35 @@ public final class APIKeyStore {
     }
 
     public void setSelectedProvider(String provider) {
+
+        if (provider == null || provider.trim().isEmpty()) {
+            provider = DEFAULT_PROVIDER;
+        }
+
         preferences.edit()
-                .putString(SELECTED, provider)
+                .putString(SELECTED, provider.trim().toUpperCase())
                 .apply();
     }
 
     public String getSelectedProvider() {
-        return preferences.getString(SELECTED, "OPENAI");
+        return preferences.getString(
+                SELECTED,
+                DEFAULT_PROVIDER
+        );
     }
 
     public void deleteKey(String provider) {
-        preferences.edit().remove(providerKey(provider)).apply();
+        preferences.edit()
+                .remove(providerKey(provider))
+                .apply();
     }
 
     private String providerKey(String provider) {
+
         if (provider == null || provider.trim().isEmpty()) {
             throw new IllegalArgumentException("Provider non valido.");
         }
+
         return "api_key_" + provider.trim().toUpperCase();
     }
 
