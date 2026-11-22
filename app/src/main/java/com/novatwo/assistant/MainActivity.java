@@ -23,6 +23,7 @@ import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.RecognitionListener;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -63,6 +64,8 @@ public class MainActivity extends FragmentActivity {
     private AIManager aiManager;
     private SpeechRecognizer recognizer;
     private TextToSpeech textToSpeech;
+    private Button continuousVoiceButton;
+    private boolean continuousVoiceMode = false;
 
     private TextView status;
     private TextView conversation;
@@ -92,6 +95,8 @@ public class MainActivity extends FragmentActivity {
 
         keyStore = new APIKeyStore(this);
         memory = new ConversationMemory(this);
+        continuousVoiceMode = getSharedPreferences("nova_voice", MODE_PRIVATE)
+                .getBoolean("continuous", false);
 
         createInterface();
         loadAIConfiguration();
@@ -294,6 +299,24 @@ public class MainActivity extends FragmentActivity {
         TextView voiceSecurityInfo = label("RISPOSTE VOCALI: NOVA legge le risposte in italiano usando la voce installata sul telefono. La disponibilità e la qualità dipendono dal motore vocale Android.", 10, MUTED, false);
         voiceSecurityInfo.setPadding(0, dp(8), 0, dp(4));
         settingsPanel.addView(voiceSecurityInfo, matchWidth());
+
+        continuousVoiceButton = new Button(this);
+        updateContinuousVoiceButton();
+        styleButton(continuousVoiceButton, false);
+        settingsPanel.addView(continuousVoiceButton, fullButtonParams());
+        continuousVoiceButton.setOnClickListener(v -> {
+            continuousVoiceMode = !continuousVoiceMode;
+            getSharedPreferences("nova_voice", MODE_PRIVATE).edit()
+                    .putBoolean("continuous", continuousVoiceMode).apply();
+            updateContinuousVoiceButton();
+            if (!continuousVoiceMode && recognizer != null) {
+                recognizer.cancel();
+                setControlsEnabled(true);
+                status.setText("ASCOLTO CONTINUO DISATTIVATO");
+            } else {
+                status.setText("ASCOLTO CONTINUO ATTIVO · PREMI PARLA PER INIZIARE");
+            }
+        });
 
         Button accessibilityButton = new Button(this);
         accessibilityButton.setText("COLLEGA E CONTROLLA LE APP");
@@ -561,12 +584,33 @@ public class MainActivity extends FragmentActivity {
         conversation = line;
     }
 
+    private void updateContinuousVoiceButton() {
+        if (continuousVoiceButton != null) {
+            continuousVoiceButton.setText(continuousVoiceMode
+                    ? "ASCOLTO CONTINUO: ATTIVO · TOCCA PER DISATTIVARE"
+                    : "ATTIVA ASCOLTO CONTINUO");
+        }
+    }
+
     private void initializeTextToSpeech() {
         textToSpeech = new TextToSpeech(this, result -> {
             if (result == TextToSpeech.SUCCESS && textToSpeech != null) {
                 int language = textToSpeech.setLanguage(Locale.ITALIAN);
                 ttsReady = language != TextToSpeech.LANG_MISSING_DATA
                         && language != TextToSpeech.LANG_NOT_SUPPORTED;
+                textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String utteranceId) { }
+                    @Override public void onDone(String utteranceId) {
+                        runOnUiThread(() -> {
+                            if (continuousVoiceMode && !requestInProgress) startListening();
+                        });
+                    }
+                    @Override public void onError(String utteranceId) {
+                        runOnUiThread(() -> {
+                            if (continuousVoiceMode && !requestInProgress) startListening();
+                        });
+                    }
+                });
             }
         });
     }
@@ -844,6 +888,8 @@ public class MainActivity extends FragmentActivity {
         if (ttsReady && textToSpeech != null && message != null
                 && !message.trim().isEmpty()) {
             textToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, "nova_response");
+        } else if (continuousVoiceMode && !requestInProgress) {
+            startListening();
         }
     }
 
