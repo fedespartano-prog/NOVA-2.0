@@ -748,9 +748,17 @@ public class MainActivity extends FragmentActivity {
                 | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
         BiometricManager manager = BiometricManager.from(this);
         if (manager.canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
-            new AlertDialog.Builder(this).setTitle("Protezione biometrica non disponibile")
-                    .setMessage("Configura impronta digitale o blocco schermo nelle impostazioni Android per proteggere NOVA.")
-                    .setCancelable(false).setPositiveButton("CHIUDI APP", (d, w) -> finish()).show();
+            // La protezione biometrica è consigliata, ma non deve rendere l'app inutilizzabile
+            // sui dispositivi che non dispongono di sensore o credenziale configurata.
+            new AlertDialog.Builder(this).setTitle("Protezione dispositivo non configurata")
+                    .setMessage("Puoi usare NOVA anche senza biometria. Per proteggere l'accesso, configura un PIN, una sequenza o un'impronta nelle impostazioni Android.")
+                    .setCancelable(false)
+                    .setNegativeButton("IMPOSTAZIONI", (d, w) ->
+                            startActivity(new Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS)))
+                    .setPositiveButton("CONTINUA", (d, w) -> {
+                        biometricUnlocked = true;
+                        status.setText("NOVA PRONTA · PROTEZIONE DISPOSITIVO NON ATTIVA");
+                    }).show();
             return;
         }
         BiometricPrompt prompt = new BiometricPrompt(this, ContextCompat.getMainExecutor(this),
