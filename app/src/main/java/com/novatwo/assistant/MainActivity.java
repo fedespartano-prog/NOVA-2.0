@@ -676,7 +676,7 @@ public class MainActivity extends FragmentActivity {
         JSONArray history = memory.getMessages();
         StringBuilder context = new StringBuilder();
         context.append("Rispondi sempre in italiano, tenendo conto della conversazione recente. ");
-        context.append("Non inventare azioni sul telefono che non hai realmente eseguito.\\n\\n");
+        context.append("Non inventare azioni sul telefono che non hai realmente eseguito.\n\n");
         int start = Math.max(0, history.length() - 9);
         for (int i = start; i < history.length(); i++) {
             JSONObject item = history.optJSONObject(i);
