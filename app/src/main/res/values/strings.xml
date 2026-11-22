@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nova_accessibility_description">Permette a NOVA di eseguire i comandi di controllo schermo che chiedi esplicitamente. Il servizio non registra né invia il contenuto dello schermo.</string>
+</resources>
