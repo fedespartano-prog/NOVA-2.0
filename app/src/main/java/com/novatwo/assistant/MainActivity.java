@@ -8,6 +8,9 @@ import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
 import android.net.Uri;
 import com.novatwo.assistant.actions.PhoneActionRouter;
 import android.content.pm.PackageManager;
@@ -89,6 +92,8 @@ public class MainActivity extends FragmentActivity {
     private boolean ttsReady;
     private boolean requestInProgress;
     private boolean recognitionActive = false;
+    private BroadcastReceiver voiceReceiver;
+    private boolean voiceReceiverRegistered = false;
     private LinearLayout mainRoot;
     private static final int MEDIA_PICK_REQUEST = 7110;
     private boolean biometricUnlocked = false;
@@ -110,7 +115,7 @@ public class MainActivity extends FragmentActivity {
         loadAIConfiguration();
         restoreConversation();
         initializeTextToSpeech();
-        initializeSpeech();
+        registerVoiceReceiver();
         applyAppearance();
         authenticateApp();
     }
@@ -169,8 +174,22 @@ public class MainActivity extends FragmentActivity {
         status.setLetterSpacing(0.12f);
         LinearLayout.LayoutParams statusParams = wrap();
         statusParams.topMargin = dp(2);
-        statusParams.bottomMargin = dp(18);
+        statusParams.bottomMargin = dp(8);
         root.addView(status, statusParams);
+
+        Button endCallButton = new Button(this);
+        endCallButton.setText("CHIUDI CHIAMATA");
+        styleButton(endCallButton, false);
+        LinearLayout.LayoutParams endCallParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42));
+        endCallParams.bottomMargin = dp(14);
+        root.addView(endCallButton, endCallParams);
+        endCallButton.setOnClickListener(v -> {
+            continuousVoiceMode = false;
+            getSharedPreferences("nova_voice", MODE_PRIVATE).edit().putBoolean("continuous", false).putBoolean("session_active", false).apply();
+            updateContinuousVoiceButton();
+            stopVoiceSession();
+            status.setText("CHIAMATA TERMINATA · MICROFONO RILASCIATO");
+        });
 
         LinearLayout chatCard = panel();
         chatCard.setOrientation(LinearLayout.VERTICAL);
@@ -366,15 +385,14 @@ public class MainActivity extends FragmentActivity {
         settingsPanel.addView(continuousVoiceButton, fullButtonParams());
         continuousVoiceButton.setOnClickListener(v -> {
             continuousVoiceMode = !continuousVoiceMode;
-            getSharedPreferences("nova_voice", MODE_PRIVATE).edit()
-                    .putBoolean("continuous", continuousVoiceMode).apply();
+            getSharedPreferences("nova_voice", MODE_PRIVATE).edit().putBoolean("continuous", continuousVoiceMode).apply();
             updateContinuousVoiceButton();
-            if (!continuousVoiceMode && recognizer != null) {
-                recognizer.cancel();
+            if (!continuousVoiceMode) {
+                stopVoiceSession();
                 setControlsEnabled(true);
-                status.setText("ASCOLTO CONTINUO DISATTIVATO");
-            } else if (continuousVoiceMode) {
-                status.setText("ASCOLTO CONTINUO ATTIVO");
+                status.setText("CHIAMATA NOVA TERMINATA");
+            } else {
+                status.setText("CHIAMATA NOVA ATTIVA");
                 startListening();
             }
         });
@@ -704,16 +722,12 @@ public class MainActivity extends FragmentActivity {
                 textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String utteranceId) {
                         runOnUiThread(() -> {
-                            if (continuousVoiceMode && !requestInProgress && !recognitionActive) {
-                                startListening();
-                            }
+                            if (continuousVoiceMode && !requestInProgress) resumeVoiceSession();
                         });
                     }
                     @Override public void onDone(String utteranceId) {
                         runOnUiThread(() -> {
-                            if (continuousVoiceMode && !requestInProgress && !recognitionActive) {
-                                startListening();
-                            }
+                            if (continuousVoiceMode && !requestInProgress) resumeVoiceSession();
                         });
                     }
                     @Override public void onError(String utteranceId) {
@@ -726,6 +740,58 @@ public class MainActivity extends FragmentActivity {
                 });
             }
         });
+    }
+
+    private void registerVoiceReceiver() {
+        if (voiceReceiverRegistered) return;
+        voiceReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context context, Intent intent) {
+                if (intent == null) return;
+                String action = intent.getAction();
+                if (com.novatwo.assistant.voice.NovaVoiceService.ACTION_USER_SPEECH.equals(action)) {
+                    if (textToSpeech != null && textToSpeech.isSpeaking()) textToSpeech.stop();
+                    return;
+                }
+                if (com.novatwo.assistant.voice.NovaVoiceService.ACTION_TRANSCRIPT.equals(action)) {
+                    String phrase = intent.getStringExtra(com.novatwo.assistant.voice.NovaVoiceService.EXTRA_TEXT);
+                    if (phrase == null || phrase.trim().isEmpty()) { resumeVoiceSession(); return; }
+                    String command = phrase.toLowerCase(Locale.ROOT);
+                    if (command.contains("chiudi chiamata") || command.contains("termina chiamata")
+                            || command.contains("smetti di ascoltare") || command.contains("disattiva ascolto")) {
+                        continuousVoiceMode = false;
+                        getSharedPreferences("nova_voice", MODE_PRIVATE).edit().putBoolean("continuous", false).putBoolean("session_active", false).apply();
+                        updateContinuousVoiceButton();
+                        stopVoiceSession();
+                        addChatLine("assistant", "Va bene, chiudo la chiamata e rilascio il microfono.");
+                        status.setText("CHIAMATA TERMINATA");
+                        speak("Va bene, chiudo la chiamata.");
+                        return;
+                    }
+                    if (messageInput != null) messageInput.setText(phrase);
+                    sendMessage(phrase);
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(com.novatwo.assistant.voice.NovaVoiceService.ACTION_TRANSCRIPT);
+        filter.addAction(com.novatwo.assistant.voice.NovaVoiceService.ACTION_USER_SPEECH);
+        if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(voiceReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(voiceReceiver, filter);
+        voiceReceiverRegistered = true;
+    }
+
+    private void resumeVoiceSession() {
+        if (!continuousVoiceMode) return;
+        Intent intent = new Intent(this, com.novatwo.assistant.voice.NovaVoiceService.class);
+        intent.setAction(com.novatwo.assistant.voice.NovaVoiceService.ACTION_RESUME);
+        try { startService(intent); } catch (Exception ignored) { }
+    }
+
+    private void stopVoiceSession() {
+        Intent intent = new Intent(this, com.novatwo.assistant.voice.NovaVoiceService.class);
+        intent.setAction(com.novatwo.assistant.voice.NovaVoiceService.ACTION_STOP);
+        try { startService(intent); } catch (Exception ignored) { }
+        getSharedPreferences("nova_voice", MODE_PRIVATE).edit().putBoolean("session_active", false).apply();
     }
 
     private void initializeSpeech() {
@@ -791,31 +857,21 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void startListening() {
-        if (requestInProgress || recognitionActive) return;
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
+        if (requestInProgress) return;
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, AUDIO_PERMISSION);
             return;
         }
-        if (recognizer == null) {
-            status.setText("RICONOSCIMENTO VOCALE NON DISPONIBILE");
-            return;
-        }
-        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "it-IT");
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
-        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "it-IT");
-        setControlsEnabled(false);
+        Intent intent = new Intent(this, com.novatwo.assistant.voice.NovaVoiceService.class);
+        intent.setAction(com.novatwo.assistant.voice.NovaVoiceService.ACTION_START);
         try {
-            recognizer.startListening(intent);
-            recognitionActive = true;
-        } catch (Exception e) {
-            recognitionActive = false;
+            androidx.core.content.ContextCompat.startForegroundService(this, intent);
+            getSharedPreferences("nova_voice", MODE_PRIVATE).edit().putBoolean("session_active", true).apply();
+            status.setText("CHIAMATA ATTIVA · NOVA TI ASCOLTA ANCHE IN BACKGROUND");
             setControlsEnabled(true);
-            status.setText("MICROFONO NON DISPONIBILE");
+        } catch (Exception e) {
+            status.setText("IMPOSSIBILE AVVIARE LA CHIAMATA VOCALE");
+            Toast.makeText(this, "Controlla il permesso microfono e le notifiche.", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -1079,7 +1135,7 @@ public class MainActivity extends FragmentActivity {
         if (ttsReady && textToSpeech != null && !spokenText.trim().isEmpty()) {
             textToSpeech.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, "nova_response");
         } else if (continuousVoiceMode && !requestInProgress) {
-            startListening();
+            resumeVoiceSession();
         }
     }
 
@@ -1104,6 +1160,10 @@ public class MainActivity extends FragmentActivity {
     @Override
     protected void onDestroy() {
         recognitionActive = false;
+        if (voiceReceiverRegistered && voiceReceiver != null) {
+            try { unregisterReceiver(voiceReceiver); } catch (Exception ignored) { }
+            voiceReceiverRegistered = false;
+        }
         if (recognizer != null) {
             recognizer.cancel();
             recognizer.destroy();
