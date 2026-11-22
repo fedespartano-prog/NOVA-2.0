@@ -83,6 +83,7 @@ public class MainActivity extends FragmentActivity {
     private LinearLayout chatHistory;
     private boolean ttsReady;
     private boolean requestInProgress;
+    private boolean recognitionActive = false;
     private LinearLayout mainRoot;
     private static final int MEDIA_PICK_REQUEST = 7110;
     private boolean biometricUnlocked = false;
@@ -618,15 +619,25 @@ public class MainActivity extends FragmentActivity {
                 ttsReady = language != TextToSpeech.LANG_MISSING_DATA
                         && language != TextToSpeech.LANG_NOT_SUPPORTED;
                 textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override public void onStart(String utteranceId) { }
+                    @Override public void onStart(String utteranceId) {
+                        runOnUiThread(() -> {
+                            if (continuousVoiceMode && !requestInProgress && !recognitionActive) {
+                                startListening();
+                            }
+                        });
+                    }
                     @Override public void onDone(String utteranceId) {
                         runOnUiThread(() -> {
-                            if (continuousVoiceMode && !requestInProgress) startListening();
+                            if (continuousVoiceMode && !requestInProgress && !recognitionActive) {
+                                startListening();
+                            }
                         });
                     }
                     @Override public void onError(String utteranceId) {
                         runOnUiThread(() -> {
-                            if (continuousVoiceMode && !requestInProgress) startListening();
+                            if (continuousVoiceMode && !requestInProgress && !recognitionActive) {
+                                startListening();
+                            }
                         });
                     }
                 });
@@ -643,9 +654,13 @@ public class MainActivity extends FragmentActivity {
         recognizer = SpeechRecognizer.createSpeechRecognizer(this);
         recognizer.setRecognitionListener(new RecognitionListener() {
             @Override public void onReadyForSpeech(Bundle params) {
+                recognitionActive = true;
                 status.setText("TI STO ASCOLTANDO");
             }
             @Override public void onBeginningOfSpeech() {
+                if (continuousVoiceMode && textToSpeech != null && textToSpeech.isSpeaking()) {
+                    textToSpeech.stop();
+                }
                 status.setText("TI STO ASCOLTANDO...");
             }
             @Override public void onRmsChanged(float value) { }
@@ -654,6 +669,7 @@ public class MainActivity extends FragmentActivity {
                 status.setText("STO PREPARANDO LA RISPOSTA");
             }
             @Override public void onError(int error) {
+                recognitionActive = false;
                 setControlsEnabled(true);
                 if (continuousVoiceMode && !requestInProgress
                         && (error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
@@ -669,6 +685,7 @@ public class MainActivity extends FragmentActivity {
                 }
             }
             @Override public void onResults(Bundle results) {
+                recognitionActive = false;
                 ArrayList<String> matches = results.getStringArrayList(
                         SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
@@ -677,6 +694,9 @@ public class MainActivity extends FragmentActivity {
                 } else {
                     setControlsEnabled(true);
                     status.setText("NON HO CAPITO · RIPROVA");
+                    if (continuousVoiceMode && !requestInProgress) {
+                        mainRoot.postDelayed(() -> startListening(), 600);
+                    }
                 }
             }
             @Override public void onPartialResults(Bundle results) { }
@@ -685,7 +705,7 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void startListening() {
-        if (requestInProgress) return;
+        if (requestInProgress || recognitionActive) return;
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, AUDIO_PERMISSION);
@@ -703,7 +723,9 @@ public class MainActivity extends FragmentActivity {
         setControlsEnabled(false);
         try {
             recognizer.startListening(intent);
+            recognitionActive = true;
         } catch (Exception e) {
+            recognitionActive = false;
             setControlsEnabled(true);
             status.setText("MICROFONO NON DISPONIBILE");
         }
@@ -750,6 +772,7 @@ public class MainActivity extends FragmentActivity {
                 .setNegativeButton("ANNULLA", (dialog, which) -> {
                     status.setText("INVIO ANNULLATO");
                     setControlsEnabled(true);
+                    if (continuousVoiceMode) mainRoot.postDelayed(() -> startListening(), 500);
                 })
                 .setPositiveButton("CONFERMO E INVIA", (dialog, which) -> sendConfirmedAIMessage(message, active))
                 .show();
@@ -922,10 +945,31 @@ public class MainActivity extends FragmentActivity {
         if (listenButton != null) listenButton.setEnabled(enabled);
     }
 
+    private String cleanTextForSpeech(String text) {
+        if (text == null) return "";
+        StringBuilder cleaned = new StringBuilder();
+        for (int offset = 0; offset < text.length();) {
+            int cp = text.codePointAt(offset);
+            offset += Character.charCount(cp);
+            int type = Character.getType(cp);
+            boolean emoji = (cp >= 0x1F000 && cp <= 0x1FAFF)
+                    || (cp >= 0x2600 && cp <= 0x27BF)
+                    || (cp >= 0x1F1E6 && cp <= 0x1F1FF)
+                    || cp == 0xFE0F || cp == 0xFE0E || cp == 0x200D
+                    || cp == 0x20E3 || (cp >= 0xE0020 && cp <= 0xE007F);
+            if (!emoji && type != Character.FORMAT) cleaned.appendCodePoint(cp);
+        }
+        return cleaned.toString()
+                .replaceAll("(?i)(?<!\\\\w)[:;=8x][-^']?[)(/\\\\]", " ")
+                .replaceAll("[ \\t]{2,}", " ")
+                .replaceAll("\\\\s+([,.!?;:])", "$1")
+                .trim();
+    }
+
     private void speak(String message) {
-        if (ttsReady && textToSpeech != null && message != null
-                && !message.trim().isEmpty()) {
-            textToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, "nova_response");
+        String spokenText = cleanTextForSpeech(message);
+        if (ttsReady && textToSpeech != null && !spokenText.trim().isEmpty()) {
+            textToSpeech.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, "nova_response");
         } else if (continuousVoiceMode && !requestInProgress) {
             startListening();
         }
@@ -951,6 +995,7 @@ public class MainActivity extends FragmentActivity {
 
     @Override
     protected void onDestroy() {
+        recognitionActive = false;
         if (recognizer != null) {
             recognizer.cancel();
             recognizer.destroy();
