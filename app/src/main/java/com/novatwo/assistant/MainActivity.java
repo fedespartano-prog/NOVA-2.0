@@ -644,7 +644,7 @@ public class MainActivity extends FragmentActivity {
         AIProvider active = aiManager.getProvider();
         new AlertDialog.Builder(this)
                 .setTitle("Confermi l'invio a " + active.getProviderName() + "?")
-                .setMessage("Il testo verrà inviato al provider AI scelto. Le API possono comportare costi o consumare eventuali crediti, in base al tuo account e al piano attivo. NOVA non può verificare da qui se la tua quota è gratuita. Nessuna richiesta partirà senza questa conferma.")
+                .setMessage("La richiesta e gli ultimi messaggi della conversazione verranno inviati al provider AI scelto. Le API possono comportare costi o consumare eventuali crediti, in base al tuo account e al piano attivo. NOVA non può verificare da qui se la tua quota è gratuita. Nessuna richiesta partirà senza questa conferma.")
                 .setNegativeButton("ANNULLA", (dialog, which) -> {
                     status.setText("INVIO ANNULLATO");
                     setControlsEnabled(true);
@@ -665,6 +665,7 @@ public class MainActivity extends FragmentActivity {
             String role = item.optString("role", "user");
             String content = item.optString("content", "");
             if (content.trim().isEmpty()) continue;
+            if (i == history.length() - 1 && content.equals(currentMessage)) continue;
             context.append("assistant".equals(role) ? "NOVA: " : "Utente: ");
             context.append(content).append('\\n');
         }
