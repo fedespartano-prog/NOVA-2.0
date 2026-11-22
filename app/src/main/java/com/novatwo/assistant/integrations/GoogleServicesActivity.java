@@ -40,6 +40,7 @@ public class GoogleServicesActivity extends Activity {
     private TextView status;
     private String pendingService = "";
     private EditText emailTo, emailSubject, emailBody;
+    private EditText eventTitle, eventStart, eventEnd;
     private static final int REQUEST_SHARE_DRIVE = 8203;
     private Uri pendingDriveUpload;
 
@@ -80,6 +81,29 @@ public class GoogleServicesActivity extends Activity {
             startActivityForResult(pick, REQUEST_SHARE_DRIVE);
         });
         addAction(root,"COLLEGA E LEGGI CALENDARIO", "CALENDAR", Arrays.asList(new Scope("https://www.googleapis.com/auth/calendar.readonly")));
+
+        TextView eventHeading = new TextView(this);
+        eventHeading.setText("CREA EVENTO IN GOOGLE CALENDAR");
+        eventHeading.setTextColor(Color.WHITE);
+        eventHeading.setTextSize(16);
+        eventHeading.setPadding(0, 22, 0, 8);
+        root.addView(eventHeading);
+        eventTitle = new EditText(this);
+        eventTitle.setSingleLine(true);
+        eventTitle.setHint("Titolo dell'evento");
+        root.addView(eventTitle, new LinearLayout.LayoutParams(-1, -2));
+        eventStart = new EditText(this);
+        eventStart.setSingleLine(true);
+        eventStart.setHint("Inizio: 2026-11-23T10:00:00+01:00");
+        root.addView(eventStart, new LinearLayout.LayoutParams(-1, -2));
+        eventEnd = new EditText(this);
+        eventEnd.setSingleLine(true);
+        eventEnd.setHint("Fine: 2026-11-23T11:00:00+01:00");
+        root.addView(eventEnd, new LinearLayout.LayoutParams(-1, -2));
+        Button createEvent = new Button(this);
+        createEvent.setText("AUTORIZZA E CREA EVENTO");
+        root.addView(createEvent, new LinearLayout.LayoutParams(-1, -2));
+        createEvent.setOnClickListener(v -> confirmAndCreateCalendarEvent());
 
         TextView composeTitle = new TextView(this);
         composeTitle.setText("SCRIVI E INVIA EMAIL");
@@ -153,6 +177,7 @@ public class GoogleServicesActivity extends Activity {
         }
         if ("GMAIL_SEND".equals(pendingService)) sendGmail(token);
         else if ("DRIVE_UPLOAD".equals(pendingService)) uploadDriveFile(token);
+        else if ("CALENDAR_CREATE".equals(pendingService)) createCalendarEvent(token);
         else fetchService(pendingService, token);
     }
 
@@ -205,6 +230,77 @@ public class GoogleServicesActivity extends Activity {
                 .setPositiveButton("CONFERMO", (dialog, which) -> authorize(
                         "GMAIL_SEND", Arrays.asList(new Scope("https://www.googleapis.com/auth/gmail.send"))))
                 .show();
+    }
+
+    private void confirmAndCreateCalendarEvent() {
+        String title = eventTitle.getText().toString().trim();
+        String start = eventStart.getText().toString().trim();
+        String end = eventEnd.getText().toString().trim();
+        if (title.isEmpty() || start.isEmpty() || end.isEmpty()
+                || !start.matches(".*[+-][0-9]{2}:[0-9]{2}$")
+                || !end.matches(".*[+-][0-9]{2}:[0-9]{2}$")) {
+            status.setText("Inserisci titolo e date complete con fuso orario, ad esempio 2026-11-23T10:00:00+01:00.");
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Confermi la creazione dell'evento?")
+                .setMessage("NOVA creerà su Google Calendar l'evento «" + title
+                        + "» dalle " + start + " alle " + end + ".")
+                .setNegativeButton("ANNULLA", null)
+                .setPositiveButton("CONFERMO", (dialog, which) -> authorize(
+                        "CALENDAR_CREATE", Arrays.asList(new Scope("https://www.googleapis.com/auth/calendar.events"))))
+                .show();
+    }
+
+    private void createCalendarEvent(String token) {
+        final String title = eventTitle.getText().toString().trim();
+        final String start = eventStart.getText().toString().trim();
+        final String end = eventEnd.getText().toString().trim();
+        status.setText("Creazione evento su Google Calendar...");
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                JSONObject startObject = new JSONObject();
+                startObject.put("dateTime", start);
+                JSONObject endObject = new JSONObject();
+                endObject.put("dateTime", end);
+                JSONObject payload = new JSONObject();
+                payload.put("summary", title);
+                payload.put("start", startObject);
+                payload.put("end", endObject);
+                URL endpoint = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
+                connection = (HttpURLConnection) endpoint.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(20000);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Authorization", "Bearer " + token);
+                connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                try (java.io.OutputStream out = connection.getOutputStream()) {
+                    out.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+                }
+                int code = connection.getResponseCode();
+                InputStream stream = code >= 200 && code < 300
+                        ? connection.getInputStream() : connection.getErrorStream();
+                StringBuilder response = new StringBuilder();
+                if (stream != null) {
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) response.append(line);
+                    }
+                }
+                if (code < 200 || code >= 300) {
+                    throw new Exception("Google Calendar HTTP " + code + ": " + response);
+                }
+                runOnUiThread(() -> status.setText("Evento creato su Google Calendar: " + title));
+            } catch (Exception e) {
+                String message = "Creazione evento non riuscita: " + safe(e.getMessage());
+                runOnUiThread(() -> status.setText(message));
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
     }
 
     private void sendGmail(String token) {
