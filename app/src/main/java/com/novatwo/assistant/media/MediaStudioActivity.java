@@ -120,7 +120,7 @@ public class MediaStudioActivity extends Activity {
                 c.setRequestProperty("Authorization","Bearer "+key);
                 c.setRequestProperty("Content-Type","application/json");
                 JSONObject body = new JSONObject();
-                body.put("model","gpt-image-1");
+                body.put("model","gpt-image-2.5-flare");
                 body.put("prompt",description);
                 body.put("size","1024x1024");
                 body.put("quality","low");
