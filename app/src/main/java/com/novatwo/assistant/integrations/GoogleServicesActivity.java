@@ -1,14 +1,17 @@
 package com.novatwo.assistant.integrations;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.graphics.Color;
+import android.util.Base64;
 
 import com.google.android.gms.auth.api.identity.AuthorizationRequest;
 import com.google.android.gms.auth.api.identity.AuthorizationResult;
@@ -32,6 +35,7 @@ public class GoogleServicesActivity extends Activity {
     private static final int REQUEST_AUTH = 8201;
     private TextView status;
     private String pendingService = "";
+    private EditText emailTo, emailSubject, emailBody;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -59,6 +63,31 @@ public class GoogleServicesActivity extends Activity {
         addAction(root,"COLLEGA E LEGGI GMAIL", "GMAIL", Arrays.asList(new Scope("https://www.googleapis.com/auth/gmail.readonly")));
         addAction(root,"COLLEGA E LEGGI FILE DRIVE", "DRIVE", Arrays.asList(new Scope("https://www.googleapis.com/auth/drive.metadata.readonly")));
         addAction(root,"COLLEGA E LEGGI CALENDARIO", "CALENDAR", Arrays.asList(new Scope("https://www.googleapis.com/auth/calendar.readonly")));
+
+        TextView composeTitle = new TextView(this);
+        composeTitle.setText("SCRIVI E INVIA EMAIL");
+        composeTitle.setTextColor(Color.WHITE);
+        composeTitle.setTextSize(16);
+        composeTitle.setPadding(0,24,0,8);
+        root.addView(composeTitle);
+        emailTo = new EditText(this);
+        emailTo.setSingleLine(true);
+        emailTo.setHint("Destinatario");
+        root.addView(emailTo, new LinearLayout.LayoutParams(-1,-2));
+        emailSubject = new EditText(this);
+        emailSubject.setSingleLine(true);
+        emailSubject.setHint("Oggetto");
+        root.addView(emailSubject, new LinearLayout.LayoutParams(-1,-2));
+        emailBody = new EditText(this);
+        emailBody.setHint("Testo dell'email");
+        emailBody.setMinLines(3);
+        emailBody.setGravity(Gravity.TOP);
+        root.addView(emailBody, new LinearLayout.LayoutParams(-1,-2));
+        Button sendEmail = new Button(this);
+        sendEmail.setText("AUTORIZZA E INVIA EMAIL");
+        root.addView(sendEmail, new LinearLayout.LayoutParams(-1,-2));
+        sendEmail.setOnClickListener(v -> confirmAndSendEmail());
+
         Button revoke = new Button(this);
         revoke.setText("REVOCA ACCESSO GOOGLE A NOVA");
         root.addView(revoke, new LinearLayout.LayoutParams(-1,-2));
@@ -105,7 +134,7 @@ public class GoogleServicesActivity extends Activity {
             status.setText("Google non ha restituito un token di accesso.");
             return;
         }
-        fetchService(pendingService, token);
+        if ("GMAIL_SEND".equals(pendingService)) sendGmail(token);\n        else fetchService(pendingService, token);
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -120,6 +149,76 @@ public class GoogleServicesActivity extends Activity {
         } catch (Exception e) {
             status.setText("Consenso Google non completato: " + safe(e.getMessage()));
         }
+    }
+
+    private void confirmAndSendEmail() {
+        String to = emailTo.getText().toString().trim();
+        String subject = emailSubject.getText().toString().trim();
+        String body = emailBody.getText().toString().trim();
+        if (to.isEmpty() || !to.contains("@") || body.isEmpty()) {
+            status.setText("Inserisci un destinatario valido e il testo dell'email.");
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Confermi l'invio?")
+                .setMessage("NOVA invierà questa email tramite Gmail a " + to
+                        + ". Controlla destinatario, oggetto e testo. L'invio partirà solo dopo il consenso Google e questa conferma.")
+                .setNegativeButton("ANNULLA", null)
+                .setPositiveButton("CONFERMO", (dialog, which) -> authorize(
+                        "GMAIL_SEND", Arrays.asList(new Scope("https://www.googleapis.com/auth/gmail.send"))))
+                .show();
+    }
+
+    private void sendGmail(String token) {
+        String to = emailTo.getText().toString().trim();
+        String subject = emailSubject.getText().toString().trim();
+        String body = emailBody.getText().toString().trim();
+        status.setText("Invio email tramite Gmail...");
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                String mime = "To: " + to + "\\r\\n"
+                        + "Subject: " + subject + "\\r\\n"
+                        + "MIME-Version: 1.0\\r\\n"
+                        + "Content-Type: text/plain; charset=UTF-8\\r\\n"
+                        + "Content-Transfer-Encoding: 8bit\\r\\n\\r\\n" + body;
+                String encoded = Base64.encodeToString(
+                        mime.getBytes(StandardCharsets.UTF_8),
+                        Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+                JSONObject payload = new JSONObject();
+                payload.put("raw", encoded);
+                connection = (HttpURLConnection) new URL(
+                        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send").openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(20000);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Authorization", "Bearer " + token);
+                connection.setRequestProperty("Content-Type", "application/json");
+                try (java.io.OutputStream out = connection.getOutputStream()) {
+                    out.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+                }
+                int code = connection.getResponseCode();
+                InputStream stream = code >= 200 && code < 300
+                        ? connection.getInputStream() : connection.getErrorStream();
+                StringBuilder response = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) response.append(line);
+                }
+                if (code < 200 || code >= 300) throw new Exception("Gmail HTTP " + code + ": " + response);
+                runOnUiThread(() -> {
+                    status.setText("Email inviata tramite Gmail.");
+                    emailBody.setText("");
+                });
+            } catch (Exception e) {
+                String message = "Invio non riuscito: " + safe(e.getMessage());
+                runOnUiThread(() -> status.setText(message));
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
     }
 
     private void fetchService(String service, String token) {
