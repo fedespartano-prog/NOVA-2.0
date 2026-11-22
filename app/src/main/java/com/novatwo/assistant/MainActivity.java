@@ -880,6 +880,7 @@ public class MainActivity extends FragmentActivity {
                     .setPositiveButton("CONTINUA", (d, w) -> {
                         biometricUnlocked = true;
                         status.setText("NOVA PRONTA · PROTEZIONE DISPOSITIVO NON ATTIVA");
+                        startVoiceAfterUnlock();
                     }).show();
             return;
         }
@@ -888,6 +889,7 @@ public class MainActivity extends FragmentActivity {
                     @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
                         biometricUnlocked = true;
                         status.setText("ACCESSO PROTETTO · BENVENUTO");
+                        startVoiceAfterUnlock();
                     }
                     @Override public void onAuthenticationError(int errorCode, CharSequence errString) {
                         biometricUnlocked = false;
@@ -901,6 +903,14 @@ public class MainActivity extends FragmentActivity {
                 .setSubtitle("Usa impronta digitale o credenziale del dispositivo")
                 .setAllowedAuthenticators(authenticators).build();
         prompt.authenticate(info);
+    }
+
+    private void startVoiceAfterUnlock() {
+        if (continuousVoiceMode && mainRoot != null) {
+            mainRoot.postDelayed(() -> {
+                if (!isFinishing() && continuousVoiceMode && !requestInProgress) startListening();
+            }, 500);
+        }
     }
 
     private void chooseAppearance() {
