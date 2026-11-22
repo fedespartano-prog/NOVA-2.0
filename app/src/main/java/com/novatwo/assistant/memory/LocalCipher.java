@@ -35,7 +35,7 @@ public final class LocalCipher {
         byte[] iv = new byte[12];
         byte[] encrypted = new byte[combined.length - 12];
         System.arraycopy(combined, 0, iv, 0, 12);
-        System.arraycopy(encrypted, 0, combined, 12, encrypted.length);
+        System.arraycopy(combined, 12, encrypted, 0, encrypted.length);
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.DECRYPT_MODE, getKey(), new GCMParameterSpec(128, iv));
         return new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8);
