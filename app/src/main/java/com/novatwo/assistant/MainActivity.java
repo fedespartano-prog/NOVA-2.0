@@ -4,6 +4,8 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.net.Uri;
+import com.novatwo.assistant.actions.PhoneActionRouter;
 import android.content.pm.PackageManager;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -73,6 +75,8 @@ public class MainActivity extends Activity {
     private LinearLayout chatHistory;
     private boolean ttsReady;
     private boolean requestInProgress;
+    private LinearLayout mainRoot;
+    private static final int MEDIA_PICK_REQUEST = 7110;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,6 +93,7 @@ public class MainActivity extends Activity {
         restoreConversation();
         initializeTextToSpeech();
         initializeSpeech();
+        applyAppearance();
     }
 
     private void createInterface() {
@@ -97,6 +102,7 @@ public class MainActivity extends Activity {
         page.setBackgroundColor(BG);
 
         LinearLayout root = new LinearLayout(this);
+        mainRoot = root;
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.setPadding(dp(22), dp(18), dp(22), dp(28));
@@ -265,6 +271,18 @@ public class MainActivity extends Activity {
         styleButton(deleteKeysButton, false);
         settingsPanel.addView(deleteKeysButton, fullButtonParams());
         deleteKeysButton.setOnClickListener(v -> confirmDeleteKeys());
+
+        Button appearanceButton = new Button(this);
+        appearanceButton.setText("PERSONALIZZA ASPETTO E SFONDO");
+        styleButton(appearanceButton, false);
+        settingsPanel.addView(appearanceButton, fullButtonParams());
+        appearanceButton.setOnClickListener(v -> chooseAppearance());
+
+        Button mediaButton = new Button(this);
+        mediaButton.setText("FOTO E VIDEO DAL TELEFONO");
+        styleButton(mediaButton, false);
+        settingsPanel.addView(mediaButton, fullButtonParams());
+        mediaButton.setOnClickListener(v -> chooseMedia());
 
         Button clearMemoryButton = new Button(this);
         clearMemoryButton.setText("CANCELLA MEMORIA LOCALE");
@@ -585,6 +603,17 @@ public class MainActivity extends Activity {
     }
 
     private void sendMessage(String message) {
+        if (message != null && PhoneActionRouter.handle(this, message, result -> runOnUiThread(() -> {
+            addChatLine("assistant", result);
+            status.setText("OPERAZIONE PRONTA");
+            speak(result);
+            setControlsEnabled(true);
+        }))) {
+            addChatLine("user", message);
+            memory.saveMessage("user", message);
+            messageInput.setText("");
+            return;
+        }
         if (message == null || message.trim().isEmpty()) {
             status.setText("SCRIVI O PRONUNCIA UN MESSAGGIO");
             setControlsEnabled(true);
@@ -621,6 +650,54 @@ public class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void chooseAppearance() {
+        final String[] names = {"Nero profondo", "Blu notte", "Verde scuro", "Viola notte", "Grigio antracite"};
+        final int[] colors = {Color.rgb(5,7,11), Color.rgb(5,12,28), Color.rgb(4,20,17),
+                Color.rgb(17,8,25), Color.rgb(24,26,30)};
+        new AlertDialog.Builder(this).setTitle("Scegli lo sfondo di NOVA")
+                .setItems(names, (dialog, which) -> {
+                    getSharedPreferences("nova_appearance", MODE_PRIVATE).edit()
+                            .putInt("background", colors[which]).apply();
+                    applyAppearance();
+                }).setNegativeButton("ANNULLA", null).show();
+    }
+
+    private void applyAppearance() {
+        int color = getSharedPreferences("nova_appearance", MODE_PRIVATE)
+                .getInt("background", BG);
+        if (mainRoot != null) {
+            mainRoot.setBackgroundColor(color);
+            View page = (View) mainRoot.getParent();
+            if (page != null) page.setBackgroundColor(color);
+        }
+        getWindow().setStatusBarColor(color);
+        getWindow().setNavigationBarColor(color);
+    }
+
+    private void chooseMedia() {
+        Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
+        pick.setType("*/*");
+        pick.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+        pick.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(Intent.createChooser(pick, "Scegli foto o video"), MEDIA_PICK_REQUEST);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == MEDIA_PICK_REQUEST && resultCode == RESULT_OK && data != null
+                && data.getData() != null) {
+            Uri uri = data.getData();
+            Intent share = new Intent(Intent.ACTION_SEND);
+            String type = getContentResolver().getType(uri);
+            share.setType(type == null ? "*/*" : type);
+            share.putExtra(Intent.EXTRA_STREAM, uri);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(share, "Condividi foto o video"));
+            addChatLine("assistant", "Ho aperto la condivisione del file selezionato. Scegli l'app e conferma tu.");
+        }
     }
 
     private void setControlsEnabled(boolean enabled) {
