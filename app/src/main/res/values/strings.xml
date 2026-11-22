@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="nova_accessibility_description">NOVA può, solo su tuo comando e previa conferma, leggere localmente il testo visibile, toccare elementi e scrivere nei campi dell'app attiva. Non registra né invia automaticamente il contenuto dello schermo.</string>
+    <string name="nova_accessibility_description">NOVA può, solo su tuo comando e previa conferma, leggere localmente il testo visibile, toccare elementi e scrivere nei campi dell applicazione attiva. Non registra né invia automaticamente il contenuto dello schermo.</string>
 </resources>
