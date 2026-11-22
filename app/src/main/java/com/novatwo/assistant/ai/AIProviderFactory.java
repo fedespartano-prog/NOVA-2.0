@@ -2,6 +2,7 @@ package com.novatwo.assistant.ai;
 
 import com.novatwo.assistant.ai.providers.DeepSeekProvider;
 import com.novatwo.assistant.ai.providers.GeminiProvider;
+import com.novatwo.assistant.ai.providers.GroqProvider;
 import com.novatwo.assistant.ai.providers.OpenAIProvider;
 
 import java.util.ArrayList;
@@ -16,20 +17,19 @@ public final class AIProviderFactory {
             String preferredProvider,
             String openAIKey,
             String deepSeekKey,
-            String geminiKey) {
+            String geminiKey,
+            String groqKey) {
 
         String selected = preferredProvider == null
                 ? "AUTO" : preferredProvider.trim().toUpperCase();
         List<AIProvider> availableProviders = new ArrayList<>();
 
-        // AUTO è volutamente limitato a Gemini: è l'unico dei tre provider
-        // qui integrati che offre un livello API gratuito utilizzabile senza
-        // credito prepagato, entro quote/modelli/regione supportati.
-        // Non passare automaticamente a DeepSeek o OpenAI: le loro API
-        // possono richiedere credito o fatturazione separata.
-        if ("AUTO".equals(selected)) {
-            if (geminiKey != null && !geminiKey.trim().isEmpty()) {
-                availableProviders.add(new GeminiProvider(geminiKey.trim()));
+        // AUTO usa esclusivamente Groq. Non effettua fallback automatici:
+        // se la quota Free è terminata, la richiesta fallisce senza costi
+        // e senza inviare dati a un altro provider.
+        if ("AUTO".equals(selected) || "GROQ".equals(selected)) {
+            if (groqKey != null && !groqKey.trim().isEmpty()) {
+                availableProviders.add(new GroqProvider(groqKey.trim()));
             }
         } else if ("GEMINI".equals(selected)) {
             if (geminiKey != null && !geminiKey.trim().isEmpty()) {
