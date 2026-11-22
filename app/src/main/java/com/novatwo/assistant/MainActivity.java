@@ -653,13 +653,32 @@ public class MainActivity extends FragmentActivity {
                 .show();
     }
 
+    private String buildConversationPrompt(String currentMessage) {
+        JSONArray history = memory.getMessages();
+        StringBuilder context = new StringBuilder();
+        context.append("Rispondi sempre in italiano, tenendo conto della conversazione recente. ");
+        context.append("Non inventare azioni sul telefono che non hai realmente eseguito.\\n\\n");
+        int start = Math.max(0, history.length() - 9);
+        for (int i = start; i < history.length(); i++) {
+            JSONObject item = history.optJSONObject(i);
+            if (item == null) continue;
+            String role = item.optString("role", "user");
+            String content = item.optString("content", "");
+            if (content.trim().isEmpty()) continue;
+            context.append("assistant".equals(role) ? "NOVA: " : "Utente: ");
+            context.append(content).append('\\n');
+        }
+        context.append("Richiesta attuale dell'utente: ").append(currentMessage);
+        return context.toString();
+    }
+
     private void sendConfirmedAIMessage(String message, AIProvider active) {
         requestInProgress = true;
         setControlsEnabled(false);
         addChatLine("user", message);
         memory.saveMessage("user", message);
         status.setText("NOVA STA PENSANDO · " + active.getProviderName().toUpperCase(Locale.ROOT));
-        aiManager.sendMessage(applyPersonality(message), new AIProvider.ResponseCallback() {
+        aiManager.sendMessage(applyPersonality(buildConversationPrompt(message)), new AIProvider.ResponseCallback() {
             @Override public void onSuccess(String response) {
                 runOnUiThread(() -> {
                     requestInProgress = false;
