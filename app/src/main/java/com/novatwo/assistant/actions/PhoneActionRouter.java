@@ -124,15 +124,16 @@ public final class PhoneActionRouter {
             return true;
         }
 
-        // Email: apre il client email senza leggere account o credenziali.
-        if (lower.equals("scrivi email") || lower.equals("scrivi una email")
-                || lower.equals("componi email")) {
-            try {
-                activity.startActivity(new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")));
-                callback.onResult("Ho aperto la composizione email. Inserisci destinatario e contenuto e conferma tu l'invio.");
-            } catch (Exception e) {
-                callback.onResult("Non trovo un'app email configurata.");
-            }
+        // Google Workspace: apre il collegamento OAuth ufficiale di NOVA.
+        if (lower.equals("collega google") || lower.equals("collega gmail")
+                || lower.equals("leggi gmail") || lower.startsWith("cerca email ")
+                || lower.startsWith("cerca nelle email ") || lower.equals("leggi drive")
+                || lower.equals("apri google drive") || lower.equals("leggi calendario")
+                || lower.equals("invia email") || lower.equals("scrivi email")
+                || lower.equals("scrivi una email") || lower.equals("componi email")) {
+            activity.startActivity(new Intent(activity,
+                    com.novatwo.assistant.integrations.GoogleServicesActivity.class));
+            callback.onResult("Ho aperto i collegamenti Google di NOVA. Da lì puoi autorizzare Gmail, Drive e Calendar e usare le funzioni collegate.");
             return true;
         }
 
@@ -244,16 +245,7 @@ public final class PhoneActionRouter {
             return true;
         }
 
-        if (lower.startsWith("cerca nelle email ") || lower.startsWith("cerca email ")) {
-            Intent gmail = activity.getPackageManager().getLaunchIntentForPackage("com.google.android.gm");
-            if (gmail != null) {
-                activity.startActivity(gmail);
-                callback.onResult("Ho aperto Gmail. Per cercare e leggere direttamente le email da NOVA servirà il collegamento ufficiale Google con il tuo consenso; non userò né copierò la tua password.");
-            } else {
-                callback.onResult("Gmail non risulta installato. Puoi aprire la posta dal browser o installare l'app ufficiale.");
-            }
-            return true;
-        }
+
 
         if (lower.contains("attiva controllo schermo") || lower.contains("attiva accessibilità nova")) {
             activity.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
