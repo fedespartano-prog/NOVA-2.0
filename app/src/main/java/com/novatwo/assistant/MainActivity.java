@@ -222,7 +222,7 @@ public class MainActivity extends FragmentActivity {
         composer.addView(actions, matchWidth());
         root.addView(composer, matchWidth());
 
-        TextView providerLine = label("AI  ·  DeepSeek  /  OpenAI  /  Gemini", 10, MUTED, false);
+        TextView providerLine = label("AI  ·  AUTO usa Gemini gratuito; DeepSeek/OpenAI possono richiedere credito", 10, MUTED, false);
         providerLine.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams providerParams = wrap();
         providerParams.topMargin = dp(13);
@@ -248,7 +248,7 @@ public class MainActivity extends FragmentActivity {
         settingsPanel.addView(providerStatus, matchWidth());
 
         providerSpinner = new Spinner(this);
-        String[] providers = {"AUTO · DeepSeek, OpenAI, Gemini",
+        String[] providers = {"AUTO · Gemini (quota gratuita)",
                 "DEEPSEEK", "OPENAI", "GEMINI"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, providers);
@@ -735,7 +735,7 @@ public class MainActivity extends FragmentActivity {
         AIProvider active = aiManager.getProvider();
         new AlertDialog.Builder(this)
                 .setTitle("Confermi l'invio a " + active.getProviderName() + "?")
-                .setMessage("La richiesta e gli ultimi messaggi della conversazione verranno inviati al provider AI scelto. Le API possono comportare costi o consumare eventuali crediti, in base al tuo account e al piano attivo. NOVA non può verificare da qui se la tua quota è gratuita. Nessuna richiesta partirà senza questa conferma.")
+                .setMessage("La richiesta e gli ultimi messaggi della conversazione verranno inviati al provider AI scelto. ATTENZIONE: DeepSeek API e OpenAI API possono richiedere credito o fatturazione separata, anche se le rispettive app ufficiali sono gratuite. AUTO usa solo Gemini API (modello con livello gratuito), nei limiti previsti da Google. Nessuna richiesta partirà senza questa conferma.")
                 .setNegativeButton("ANNULLA", (dialog, which) -> {
                     status.setText("INVIO ANNULLATO");
                     setControlsEnabled(true);
