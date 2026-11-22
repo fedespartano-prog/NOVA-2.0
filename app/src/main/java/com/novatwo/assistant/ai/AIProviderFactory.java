@@ -3,6 +3,7 @@ package com.novatwo.assistant.ai;
 import com.novatwo.assistant.ai.providers.DeepSeekProvider;
 import com.novatwo.assistant.ai.providers.GeminiProvider;
 import com.novatwo.assistant.ai.providers.GroqProvider;
+import com.novatwo.assistant.ai.providers.GrokProvider;
 import com.novatwo.assistant.ai.providers.OpenAIProvider;
 
 import java.util.ArrayList;
@@ -18,7 +19,8 @@ public final class AIProviderFactory {
             String openAIKey,
             String deepSeekKey,
             String geminiKey,
-            String groqKey) {
+            String groqKey,
+            String grokKey) {
 
         String selected = preferredProvider == null
                 ? "AUTO" : preferredProvider.trim().toUpperCase();
@@ -42,6 +44,10 @@ public final class AIProviderFactory {
         } else if ("OPENAI".equals(selected)) {
             if (openAIKey != null && !openAIKey.trim().isEmpty()) {
                 availableProviders.add(new OpenAIProvider(openAIKey.trim()));
+            }
+        } else if ("GROK".equals(selected)) {
+            if (grokKey != null && !grokKey.trim().isEmpty()) {
+                availableProviders.add(new GrokProvider(grokKey.trim()));
             }
         }
 
