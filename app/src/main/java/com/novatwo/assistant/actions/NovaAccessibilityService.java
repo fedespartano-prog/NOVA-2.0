@@ -49,6 +49,17 @@ public class NovaAccessibilityService extends AccessibilityService {
             return root != null && root.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
                     ? "Ho fatto scorrere la schermata." : "Non trovo una schermata scorrevole.";
         }
+
+        if (value.equals("leggi")) {
+            AccessibilityNodeInfo root = service.getRootInActiveWindow();
+            if (root == null) return "Non riesco a leggere la schermata attiva.";
+            StringBuilder visibleText = new StringBuilder();
+            collectVisibleText(root, visibleText);
+            root.recycle();
+            if (visibleText.length() == 0) return "La schermata attiva non espone testo leggibile.";
+            String result = visibleText.toString().trim();
+            return result.length() > 4000 ? result.substring(0, 4000) : result;
+        }
         if (value.startsWith("tocca ")) {
             String label = value.substring(6).trim();
             AccessibilityNodeInfo root = service.getRootInActiveWindow();
@@ -77,6 +88,23 @@ public class NovaAccessibilityService extends AccessibilityService {
             return ok ? "Ho inserito il testo nel campo attivo. Controllalo prima di inviarlo." : "Non riesco a scrivere in quel campo.";
         }
         return "Comando di controllo non riconosciuto.";
+    }
+
+    private static void collectVisibleText(AccessibilityNodeInfo node, StringBuilder output) {
+        if (node == null || output.length() >= 4000) return;
+        CharSequence text = node.getText();
+        if (text == null || text.length() == 0) text = node.getContentDescription();
+        if (text != null && text.length() > 0) {
+            if (output.length() > 0) output.append(" · ");
+            output.append(text);
+        }
+        for (int i = 0; i < node.getChildCount() && output.length() < 4000; i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                collectVisibleText(child, output);
+                child.recycle();
+            }
+        }
     }
 
     private static AccessibilityNodeInfo findText(AccessibilityNodeInfo node, String text) {
