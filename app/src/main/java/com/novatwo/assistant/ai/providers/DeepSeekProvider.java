@@ -89,6 +89,21 @@ public class DeepSeekProvider implements AIProvider {
                 request.put("thinking", new JSONObject().put("type", "disabled"));
                 request.put("max_tokens", 2048);
                 request.put("safety_check", new JSONObject().put("level", "high"));
+                String lowerPrompt = prompt.toLowerCase(java.util.Locale.ROOT);
+                if (lowerPrompt.contains("cerca su internet")
+                        || lowerPrompt.contains("cerca sul web")
+                        || lowerPrompt.contains("cerca online")
+                        || lowerPrompt.contains("fai una ricerca web")) {
+                    JSONArray tools = new JSONArray();
+                    tools.put(new JSONObject()
+                            .put("type", "deepseek_web_search")
+                            .put("name", "deepseek_web_search"));
+                    tools.put(new JSONObject()
+                            .put("type", "deepseek_read_url")
+                            .put("name", "deepseek_read_url"));
+                    request.put("tools", tools);
+                    request.put("tool_choice", "auto");
+                }
                 request.put("messages", messages);
 
                 byte[] data = request.toString()
