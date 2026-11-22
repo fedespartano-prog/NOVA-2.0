@@ -774,6 +774,11 @@ public class MainActivity extends FragmentActivity {
             return;
         }
         AIProvider active = aiManager.getProvider();
+        String providerConsentKey = active.getProviderName().toLowerCase(Locale.ROOT);
+        if (sessionApprovedProviders.contains(providerConsentKey)) {
+            sendConfirmedAIMessage(message, active);
+            return;
+        }
         new AlertDialog.Builder(this)
                 .setTitle("Confermi l'invio a " + active.getProviderName() + "?")
                 .setMessage("La richiesta e gli ultimi messaggi verranno inviati al provider AI scelto. Groq può essere usato nel piano Free entro i limiti; non passare al piano Developer e non aggiungere metodi di pagamento. Se il piano Free non consente la richiesta, NOVA mostrerà l'errore senza provare altri provider. DeepSeek e OpenAI possono richiedere credito separato. Nessuna richiesta partirà senza conferma.")
@@ -782,7 +787,10 @@ public class MainActivity extends FragmentActivity {
                     setControlsEnabled(true);
                     if (continuousVoiceMode) mainRoot.postDelayed(() -> startListening(), 500);
                 })
-                .setPositiveButton("CONFERMO E INVIA", (dialog, which) -> sendConfirmedAIMessage(message, active))
+                .setPositiveButton("CONFERMO E INVIA", (dialog, which) -> {
+                    sessionApprovedProviders.add(providerConsentKey);
+                    sendConfirmedAIMessage(message, active);
+                })
                 .show();
     }
 
