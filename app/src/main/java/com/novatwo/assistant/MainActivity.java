@@ -515,8 +515,6 @@ public class MainActivity extends FragmentActivity {
         button.setMinHeight(0);
         button.setMinimumHeight(0);
         button.setMinimumWidth(0);
-        button.setInsetTop(0);
-        button.setInsetBottom(0);
         button.setElevation(0f);
         button.setStateListAnimator(null);
     }
