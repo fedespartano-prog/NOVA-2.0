@@ -4,6 +4,8 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import java.util.List;
 import android.location.Location;
 import android.location.LocationManager;
 import android.net.Uri;
@@ -84,16 +86,10 @@ public final class PhoneActionRouter {
             return true;
         }
 
-        if (lower.equals("apri whatsapp") || lower.equals("apri gmail")
-                || lower.equals("apri facebook") || lower.equals("apri instagram")
-                || lower.equals("apri youtube") || lower.equals("apri google maps")) {
-            String packageName = lower.contains("whatsapp") ? "com.whatsapp"
-                    : lower.contains("gmail") ? "com.google.android.gm"
-                    : lower.contains("facebook") ? "com.facebook.katana"
-                    : lower.contains("instagram") ? "com.instagram.android"
-                    : lower.contains("youtube") ? "com.google.android.youtube"
-                    : "com.google.android.apps.maps";
-            launchApp(activity, packageName, lower.substring(5), callback);
+        if (lower.startsWith("apri ")) {
+            String requestedApp = command.substring(5).trim();
+            if (requestedApp.isEmpty()) callback.onResult("Dimmi quale applicazione vuoi aprire.");
+            else launchAnyInstalledApp(activity, requestedApp, callback);
             return true;
         }
 
@@ -258,6 +254,46 @@ public final class PhoneActionRouter {
             activity.startActivityForResult(Intent.createChooser(pick, "Scegli la foto"), 7105);
             callback.onResult("Scegli la foto da condividere. Dopo la selezione potrai scegliere WhatsApp e confermare l'invio.");
         } catch (Exception e) { callback.onResult("Non riesco ad aprire la selezione delle foto."); }
+    }
+
+
+    private static void launchAnyInstalledApp(Activity activity, String requestedName, ResultCallback callback) {
+        Intent query = new Intent(Intent.ACTION_MAIN, null);
+        query.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> apps = activity.getPackageManager().queryIntentActivities(query, 0);
+        String wanted = requestedName.toLowerCase(Locale.ITALIAN).trim();
+        ResolveInfo best = null;
+        for (ResolveInfo info : apps) {
+            CharSequence label = info.loadLabel(activity.getPackageManager());
+            if (label != null && label.toString().toLowerCase(Locale.ITALIAN).equals(wanted)) {
+                best = info;
+                break;
+            }
+        }
+        if (best == null) {
+            for (ResolveInfo info : apps) {
+                CharSequence label = info.loadLabel(activity.getPackageManager());
+                if (label != null && label.toString().toLowerCase(Locale.ITALIAN).contains(wanted)) {
+                    best = info;
+                    break;
+                }
+            }
+        }
+        if (best == null) {
+            callback.onResult("Non trovo un'app installata con il nome «" + requestedName
+                    + "». Controlla il nome mostrato nella schermata del telefono.");
+            return;
+        }
+        Intent launch = new Intent(Intent.ACTION_MAIN);
+        launch.addCategory(Intent.CATEGORY_LAUNCHER);
+        launch.setClassName(best.activityInfo.packageName, best.activityInfo.name);
+        try {
+            activity.startActivity(launch);
+            callback.onResult("Ho aperto " + best.loadLabel(activity.getPackageManager())
+                    + ". Per le operazioni dentro l'app ti chiederò conferma quando necessario.");
+        } catch (Exception e) {
+            callback.onResult("Android non consente di aprire questa applicazione in questo momento.");
+        }
     }
 
     private static void launchApp(Activity activity, String packageName, String label, ResultCallback callback) {
