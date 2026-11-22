@@ -313,6 +313,13 @@ public class MainActivity extends FragmentActivity {
         settingsPanel.addView(mediaButton, fullButtonParams());
         mediaButton.setOnClickListener(v -> startActivity(new Intent(this, com.novatwo.assistant.media.MediaStudioActivity.class)));
 
+        Button analyzeMediaButton = new Button(this);
+        analyzeMediaButton.setText("ANALIZZA FOTO O VIDEO CON L'AI");
+        styleButton(analyzeMediaButton, false);
+        settingsPanel.addView(analyzeMediaButton, fullButtonParams());
+        analyzeMediaButton.setOnClickListener(v -> startActivity(new Intent(this,
+                com.novatwo.assistant.media.MediaAnalysisActivity.class)));
+
         Button clearMemoryButton = new Button(this);
         clearMemoryButton.setText("CANCELLA MEMORIA LOCALE");
         styleButton(clearMemoryButton, false);
