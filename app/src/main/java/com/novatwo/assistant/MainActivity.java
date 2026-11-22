@@ -25,6 +25,8 @@ import android.speech.RecognitionListener;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.text.InputType;
+import android.text.util.Linkify;
+import android.text.method.LinkMovementMethod;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -50,6 +52,8 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.HashSet;
+import java.util.Set;
 
 public class MainActivity extends FragmentActivity {
 
