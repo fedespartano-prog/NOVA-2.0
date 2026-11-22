@@ -321,6 +321,22 @@ public class MainActivity extends FragmentActivity {
         settingsPanel.addView(saveButton, fullButtonParams());
         saveButton.setOnClickListener(v -> saveAIConfiguration());
 
+        Button resetProviderConsentButton = new Button(this);
+        resetProviderConsentButton.setText("GESTISCI AUTORIZZAZIONI AI");
+        styleButton(resetProviderConsentButton, false);
+        settingsPanel.addView(resetProviderConsentButton, fullButtonParams());
+        resetProviderConsentButton.setOnClickListener(v -> {
+            new AlertDialog.Builder(this)
+                    .setTitle("Autorizzazioni dei servizi AI")
+                    .setMessage("Le autorizzazioni ricordate permettono a NOVA di inviare i normali messaggi al provider selezionato senza chiedere conferma ogni volta. Vuoi revocare tutte le autorizzazioni?")
+                    .setNegativeButton("MANTIENI", null)
+                    .setPositiveButton("REVOCA TUTTE", (d, w) -> {
+                        getSharedPreferences("nova_provider_consent", MODE_PRIVATE).edit().clear().apply();
+                        sessionApprovedProviders.clear();
+                        Toast.makeText(this, "Autorizzazioni AI revocate.", Toast.LENGTH_SHORT).show();
+                    }).show();
+        });
+
         Button deleteKeysButton = new Button(this);
         deleteKeysButton.setText("ELIMINA TUTTE LE CHIAVI");
         styleButton(deleteKeysButton, false);
@@ -839,19 +855,23 @@ public class MainActivity extends FragmentActivity {
         }
         AIProvider active = aiManager.getProvider();
         String providerConsentKey = active.getProviderName().toLowerCase(Locale.ROOT);
-        if (sessionApprovedProviders.contains(providerConsentKey)) {
+        boolean providerAlreadyApproved = getSharedPreferences("nova_provider_consent", MODE_PRIVATE)
+                .getBoolean(providerConsentKey, false);
+        if (providerAlreadyApproved) {
             sendConfirmedAIMessage(message, active);
             return;
         }
         new AlertDialog.Builder(this)
                 .setTitle("Confermi l'invio a " + active.getProviderName() + "?")
-                .setMessage("La richiesta e gli ultimi messaggi verranno inviati al provider AI scelto. Groq può essere usato nel piano Free entro i limiti; non passare al piano Developer e non aggiungere metodi di pagamento. Se il piano Free non consente la richiesta, NOVA mostrerà l'errore senza provare altri provider. DeepSeek e OpenAI possono richiedere credito separato. Nessuna richiesta partirà senza conferma.")
+                .setMessage("La richiesta e il contesto della conversazione verranno inviati a " + active.getProviderName() + ". Confermando, NOVA ricorderà questa autorizzazione anche dopo la chiusura dell'app e non te lo richiederà per ogni messaggio. Potrai revocarla dalle impostazioni. Per Groq usa esclusivamente il piano gratuito e non aggiungere metodi di pagamento. Altri provider potrebbero richiedere credito: NOVA non deve usarli se non sono configurati per un accesso gratuito.")
                 .setNegativeButton("ANNULLA", (dialog, which) -> {
                     status.setText("INVIO ANNULLATO");
                     setControlsEnabled(true);
                     if (continuousVoiceMode) mainRoot.postDelayed(() -> startListening(), 500);
                 })
-                .setPositiveButton("CONFERMO E INVIA", (dialog, which) -> {
+                .setPositiveButton("AUTORIZZA SEMPRE E INVIA", (dialog, which) -> {
+                    getSharedPreferences("nova_provider_consent", MODE_PRIVATE).edit()
+                            .putBoolean(providerConsentKey, true).apply();
                     sessionApprovedProviders.add(providerConsentKey);
                     sendConfirmedAIMessage(message, active);
                 })
