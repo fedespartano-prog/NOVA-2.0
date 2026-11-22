@@ -86,6 +86,113 @@ public final class PhoneActionRouter {
             return true;
         }
 
+        // Chiamate: apre il compositore telefonico, senza avviare chiamate automaticamente.
+        if (lower.startsWith("chiama ")) {
+            String number = command.substring(7).trim();
+            if (number.isEmpty()) callback.onResult("Dimmi il numero da chiamare.");
+            else {
+                try {
+                    activity.startActivity(new Intent(Intent.ACTION_DIAL,
+                            Uri.parse("tel:" + Uri.encode(number))));
+                    callback.onResult("Ho aperto il tastierino con il numero. Premi tu il tasto di chiamata.");
+                } catch (Exception e) {
+                    callback.onResult("Non riesco ad aprire il tastierino telefonico.");
+                }
+            }
+            return true;
+        }
+
+        // SMS: prepara il messaggio nel client predefinito; l'invio resta manuale.
+        if (lower.startsWith("sms a ")) {
+            String payload = command.substring(6).trim();
+            int split = payload.indexOf(' ');
+            if (split <= 0 || split == payload.length() - 1) {
+                callback.onResult("Usa: SMS a NUMERO TESTO DEL MESSAGGIO.");
+            } else {
+                String number = payload.substring(0, split).trim();
+                String body = payload.substring(split + 1).trim();
+                try {
+                    Intent sms = new Intent(Intent.ACTION_SENDTO,
+                            Uri.parse("smsto:" + Uri.encode(number)));
+                    sms.putExtra("sms_body", body);
+                    activity.startActivity(sms);
+                    callback.onResult("Ho preparato l'SMS. Controlla destinatario e testo, poi invialo tu.");
+                } catch (Exception e) {
+                    callback.onResult("Non riesco ad aprire il compositore SMS.");
+                }
+            }
+            return true;
+        }
+
+        // Email: apre il client email senza leggere account o credenziali.
+        if (lower.equals("scrivi email") || lower.equals("scrivi una email")
+                || lower.equals("componi email")) {
+            try {
+                activity.startActivity(new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")));
+                callback.onResult("Ho aperto la composizione email. Inserisci destinatario e contenuto e conferma tu l'invio.");
+            } catch (Exception e) {
+                callback.onResult("Non trovo un'app email configurata.");
+            }
+            return true;
+        }
+
+        // Ricerca web: passa la ricerca al browser, senza inviare dati ad altri servizi AI.
+        if (lower.startsWith("cerca su internet ") || lower.startsWith("cerca sul web ")
+                || lower.startsWith("cerca online ")) {
+            String query = command.replaceFirst("(?i)^(cerca su internet |cerca sul web |cerca online )", "").trim();
+            if (query.isEmpty()) callback.onResult("Dimmi cosa vuoi cercare.");
+            else {
+                try {
+                    String encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name());
+                    activity.startActivity(new Intent(Intent.ACTION_VIEW,
+                            Uri.parse("https://www.google.com/search?q=" + encoded)));
+                    callback.onResult("Ho aperto il browser con la ricerca: " + query);
+                } catch (Exception e) {
+                    callback.onResult("Non riesco ad aprire il browser.");
+                }
+            }
+            return true;
+        }
+
+        // Calendario: prepara un nuovo evento e lascia all'utente data e salvataggio.
+        if (lower.startsWith("crea evento ") || lower.startsWith("aggiungi evento ")) {
+            String title = command.replaceFirst("(?i)^(crea evento |aggiungi evento )", "").trim();
+            if (title.isEmpty()) callback.onResult("Dimmi il titolo dell'evento.");
+            else {
+                try {
+                    Intent event = new Intent(Intent.ACTION_INSERT);
+                    event.setData(android.provider.CalendarContract.Events.CONTENT_URI);
+                    event.putExtra(android.provider.CalendarContract.Events.TITLE, title);
+                    activity.startActivity(event);
+                    callback.onResult("Ho preparato l'evento «" + title + "» nel calendario. Completa data e orario e salvalo tu.");
+                } catch (Exception e) {
+                    callback.onResult("Non riesco ad aprire il calendario.");
+                }
+            }
+            return true;
+        }
+
+        // Sveglia: Android apre l'interfaccia di conferma dell'orologio.
+        if (lower.startsWith("imposta sveglia alle ")) {
+            String time = command.substring("imposta sveglia alle ".length()).trim();
+            try {
+                String[] parts = time.split(":");
+                int hour = Integer.parseInt(parts[0]);
+                int minute = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+                if (hour < 0 || hour > 23 || minute < 0 || minute > 59) throw new IllegalArgumentException();
+                Intent alarm = new Intent(android.provider.AlarmClock.ACTION_SET_ALARM);
+                alarm.putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour);
+                alarm.putExtra(android.provider.AlarmClock.EXTRA_MINUTES, minute);
+                alarm.putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, "NOVA");
+                alarm.putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false);
+                activity.startActivity(alarm);
+                callback.onResult("Ho aperto l'orologio per impostare la sveglia alle " + String.format(Locale.ITALIAN, "%02d:%02d", hour, minute) + ". Conferma sul telefono.");
+            } catch (Exception e) {
+                callback.onResult("Orario non valido. Usa il formato 07:30.");
+            }
+            return true;
+        }
+
         if (lower.startsWith("apri ")) {
             String requestedApp = command.substring(5).trim();
             if (requestedApp.isEmpty()) callback.onResult("Dimmi quale applicazione vuoi aprire.");
