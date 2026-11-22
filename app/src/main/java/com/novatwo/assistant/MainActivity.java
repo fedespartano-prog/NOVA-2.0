@@ -291,7 +291,7 @@ public class MainActivity extends FragmentActivity {
         settingsPanel.addView(personalityButton, fullButtonParams());
         personalityButton.setOnClickListener(v -> choosePersonality());
 
-        TextView voiceSecurityInfo = label("VERIFICA VOCALE: il riconoscimento affidabile della tua identità tramite impronta vocale non è ancora integrato. NOVA non deve fingere di distinguere le persone. Le risposte vocali restano disattivate finché non sarà aggiunto un vero sistema di verifica del parlante.", 10, MUTED, false);
+        TextView voiceSecurityInfo = label("RISPOSTE VOCALI: NOVA legge le risposte in italiano usando la voce installata sul telefono. La disponibilità e la qualità dipendono dal motore vocale Android.", 10, MUTED, false);
         voiceSecurityInfo.setPadding(0, dp(8), 0, dp(4));
         settingsPanel.addView(voiceSecurityInfo, matchWidth());
 
@@ -641,11 +641,23 @@ public class MainActivity extends FragmentActivity {
             setControlsEnabled(true);
             return;
         }
+        AIProvider active = aiManager.getProvider();
+        new AlertDialog.Builder(this)
+                .setTitle("Confermi l'invio a " + active.getProviderName() + "?")
+                .setMessage("Il testo verrà inviato al provider AI scelto. Le API possono comportare costi o consumare eventuali crediti, in base al tuo account e al piano attivo. NOVA non può verificare da qui se la tua quota è gratuita. Nessuna richiesta partirà senza questa conferma.")
+                .setNegativeButton("ANNULLA", (dialog, which) -> {
+                    status.setText("INVIO ANNULLATO");
+                    setControlsEnabled(true);
+                })
+                .setPositiveButton("CONFERMO E INVIA", (dialog, which) -> sendConfirmedAIMessage(message, active))
+                .show();
+    }
+
+    private void sendConfirmedAIMessage(String message, AIProvider active) {
         requestInProgress = true;
         setControlsEnabled(false);
         addChatLine("user", message);
         memory.saveMessage("user", message);
-        AIProvider active = aiManager.getProvider();
         status.setText("NOVA STA PENSANDO · " + active.getProviderName().toUpperCase(Locale.ROOT));
         aiManager.sendMessage(applyPersonality(message), new AIProvider.ResponseCallback() {
             @Override public void onSuccess(String response) {
@@ -782,8 +794,7 @@ public class MainActivity extends FragmentActivity {
 
     private void speak(String message) {
         if (ttsReady && textToSpeech != null && message != null
-                && getSharedPreferences("nova_voice_security", MODE_PRIVATE)
-                        .getBoolean("verified_speaker_enabled", false)) {
+                && !message.trim().isEmpty()) {
             textToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, "nova_response");
         }
     }
