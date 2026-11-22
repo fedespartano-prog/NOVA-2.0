@@ -18,24 +18,35 @@ public final class AIProviderFactory {
             String deepSeekKey,
             String geminiKey) {
 
+        String selected = preferredProvider == null
+                ? "AUTO" : preferredProvider.trim().toUpperCase();
         List<AIProvider> availableProviders = new ArrayList<>();
 
-        // AUTO usa il primo provider configurato, nell'ordine DeepSeek,
-        // OpenAI, Gemini. Non invia la stessa richiesta a più servizi.
-        if (deepSeekKey != null && !deepSeekKey.trim().isEmpty()) {
-            availableProviders.add(new DeepSeekProvider(deepSeekKey.trim()));
-        }
-
-        if (openAIKey != null && !openAIKey.trim().isEmpty()) {
-            availableProviders.add(new OpenAIProvider(openAIKey.trim()));
-        }
-
-        if (geminiKey != null && !geminiKey.trim().isEmpty()) {
-            availableProviders.add(new GeminiProvider(geminiKey.trim()));
+        // AUTO è volutamente limitato a Gemini: è l'unico dei tre provider
+        // qui integrati che offre un livello API gratuito utilizzabile senza
+        // credito prepagato, entro quote/modelli/regione supportati.
+        // Non passare automaticamente a DeepSeek o OpenAI: le loro API
+        // possono richiedere credito o fatturazione separata.
+        if ("AUTO".equals(selected)) {
+            if (geminiKey != null && !geminiKey.trim().isEmpty()) {
+                availableProviders.add(new GeminiProvider(geminiKey.trim()));
+            }
+        } else if ("GEMINI".equals(selected)) {
+            if (geminiKey != null && !geminiKey.trim().isEmpty()) {
+                availableProviders.add(new GeminiProvider(geminiKey.trim()));
+            }
+        } else if ("DEEPSEEK".equals(selected)) {
+            if (deepSeekKey != null && !deepSeekKey.trim().isEmpty()) {
+                availableProviders.add(new DeepSeekProvider(deepSeekKey.trim()));
+            }
+        } else if ("OPENAI".equals(selected)) {
+            if (openAIKey != null && !openAIKey.trim().isEmpty()) {
+                availableProviders.add(new OpenAIProvider(openAIKey.trim()));
+            }
         }
 
         AIManager manager = new AIManager();
-        manager.setProviders(availableProviders, preferredProvider);
+        manager.setProviders(availableProviders, "AUTO");
         return manager;
     }
 }
