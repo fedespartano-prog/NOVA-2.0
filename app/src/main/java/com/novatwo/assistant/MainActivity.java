@@ -2,8 +2,16 @@ package com.novatwo.assistant;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
@@ -11,7 +19,10 @@ import android.speech.RecognitionListener;
 import android.speech.tts.TextToSpeech;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -27,12 +38,19 @@ import com.novatwo.assistant.ai.AIProviderFactory;
 import com.novatwo.assistant.config.APIKeyStore;
 import com.novatwo.assistant.memory.ConversationMemory;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
 
     private static final int AUDIO_PERMISSION = 100;
+    private static final int BG = Color.rgb(5, 7, 11);
+    private static final int PANEL = Color.rgb(15, 19, 25);
+    private static final int GREEN = Color.rgb(0, 255, 164);
+    private static final int MUTED = Color.rgb(139, 151, 163);
 
     private APIKeyStore keyStore;
     private ConversationMemory memory;
@@ -42,6 +60,8 @@ public class MainActivity extends Activity {
 
     private TextView status;
     private TextView conversation;
+    private TextView providerStatus;
+    private TextView keyStatus;
     private EditText messageInput;
     private EditText deepSeekInput;
     private EditText openAIInput;
@@ -49,151 +69,322 @@ public class MainActivity extends Activity {
     private Spinner providerSpinner;
     private Button listenButton;
     private Button sendButton;
+    private LinearLayout settingsPanel;
+    private LinearLayout chatHistory;
     private boolean ttsReady;
+    private boolean requestInProgress;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setStatusBarColor(BG);
+        getWindow().setNavigationBarColor(BG);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
         keyStore = new APIKeyStore(this);
         memory = new ConversationMemory(this);
 
         createInterface();
         loadAIConfiguration();
+        restoreConversation();
         initializeTextToSpeech();
         initializeSpeech();
     }
 
     private void createInterface() {
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setGravity(Gravity.CENTER_HORIZONTAL);
-        layout.setPadding(28, 24, 28, 32);
-        layout.setBackgroundColor(0xFF090B12);
+        ScrollView page = new ScrollView(this);
+        page.setFillViewport(true);
+        page.setBackgroundColor(BG);
 
-        TextView title = createLabel("NOVA 2.0");
-        title.setTextSize(32);
-        title.setGravity(Gravity.CENTER);
-        layout.addView(title);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setPadding(dp(22), dp(18), dp(22), dp(28));
+        root.setBackgroundColor(BG);
 
-        status = createLabel("Assistente pronta");
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+
+        TextView brand = label("N O V A", 19, Color.WHITE, true);
+        brand.setLetterSpacing(0.16f);
+        header.addView(brand, new LinearLayout.LayoutParams(0, dp(42), 1));
+
+        TextView version = label("2.0  /  PERSONAL AI", 10, MUTED, true);
+        version.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+        header.addView(version);
+        root.addView(header, matchWidth());
+
+        TextView intro = label("IL TUO ASSISTENTE", 10, GREEN, true);
+        intro.setLetterSpacing(0.22f);
+        intro.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams introParams = wrap();
+        introParams.topMargin = dp(22);
+        root.addView(intro, introParams);
+
+        TextView headline = label("Sono qui.", 29, Color.WHITE, false);
+        headline.setGravity(Gravity.CENTER);
+        root.addView(headline, wrap());
+
+        OrbView orb = new OrbView(this);
+        LinearLayout.LayoutParams orbParams = new LinearLayout.LayoutParams(dp(224), dp(224));
+        orbParams.gravity = Gravity.CENTER;
+        orbParams.topMargin = dp(5);
+        orbParams.bottomMargin = dp(2);
+        root.addView(orb, orbParams);
+
+        status = label("PRONTA QUANDO VUOI", 10, GREEN, true);
         status.setGravity(Gravity.CENTER);
-        layout.addView(status);
+        status.setLetterSpacing(0.12f);
+        LinearLayout.LayoutParams statusParams = wrap();
+        statusParams.topMargin = dp(2);
+        statusParams.bottomMargin = dp(18);
+        root.addView(status, statusParams);
 
-        conversation = createLabel("Ciao! Sono NOVA. Scrivimi oppure premi il microfono.");
-        conversation.setTextSize(16);
-        layout.addView(conversation);
+        LinearLayout chatCard = panel();
+        chatCard.setOrientation(LinearLayout.VERTICAL);
+        chatCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+
+        LinearLayout chatHeader = new LinearLayout(this);
+        chatHeader.setGravity(Gravity.CENTER_VERTICAL);
+        TextView chatTitle = label("CONVERSAZIONE", 10, MUTED, true);
+        chatTitle.setLetterSpacing(0.13f);
+        chatHeader.addView(chatTitle, new LinearLayout.LayoutParams(0, dp(24), 1));
+        TextView localTag = label("MEMORIA LOCALE", 9, GREEN, true);
+        chatHeader.addView(localTag);
+        chatCard.addView(chatHeader);
+
+        chatHistory = new LinearLayout(this);
+        chatHistory.setOrientation(LinearLayout.VERTICAL);
+        TextView welcome = label("Ciao, sono NOVA. Puoi parlarmi oppure scrivermi qui sotto.", 14,
+                Color.rgb(220, 226, 232), false);
+        welcome.setPadding(0, dp(8), 0, dp(6));
+        chatHistory.addView(welcome, matchWidth());
+        chatCard.addView(chatHistory, matchWidth());
+        conversation = welcome;
+        LinearLayout.LayoutParams chatParams = matchWidth();
+        chatParams.bottomMargin = dp(14);
+        root.addView(chatCard, chatParams);
+
+        LinearLayout composer = panel();
+        composer.setOrientation(LinearLayout.VERTICAL);
+        composer.setPadding(dp(12), dp(8), dp(12), dp(10));
 
         messageInput = new EditText(this);
-        messageInput.setHint("Scrivi un messaggio...");
-        messageInput.setTextColor(0xFFFFFFFF);
-        messageInput.setHintTextColor(0xFFAAAAAA);
+        messageInput.setTextColor(Color.WHITE);
+        messageInput.setHintTextColor(Color.rgb(112, 124, 137));
+        messageInput.setHint("Scrivi a NOVA...");
+        messageInput.setTextSize(15);
+        messageInput.setSingleLine(false);
+        messageInput.setMinLines(1);
+        messageInput.setMaxLines(4);
+        messageInput.setBackgroundColor(Color.TRANSPARENT);
+        messageInput.setPadding(dp(5), dp(7), dp(5), dp(7));
         messageInput.setInputType(InputType.TYPE_CLASS_TEXT
-                | InputType.TYPE_TEXT_FLAG_MULTI_LINE
-                | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        messageInput.setMinLines(2);
-        messageInput.setGravity(Gravity.TOP);
-        layout.addView(messageInput, matchWidth());
+                | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        composer.addView(messageInput, matchWidth());
 
-        sendButton = new Button(this);
-        sendButton.setText("INVIA MESSAGGIO");
-        sendButton.setOnClickListener(v -> sendTypedMessage());
-        layout.addView(sendButton, matchWidth());
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
 
         listenButton = new Button(this);
-        listenButton.setText("🎤 PARLA CON NOVA");
+        listenButton.setText("🎙  PARLA");
+        styleButton(listenButton, false);
+        actions.addView(listenButton, new LinearLayout.LayoutParams(0, dp(48), 1));
         listenButton.setOnClickListener(v -> startListening());
-        layout.addView(listenButton, matchWidth());
 
-        TextView configTitle = createLabel("CONFIGURA I SERVIZI AI");
-        configTitle.setTextSize(19);
-        layout.addView(configTitle);
+        sendButton = new Button(this);
+        sendButton.setText("INVIA  ↗");
+        styleButton(sendButton, true);
+        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(0, dp(48), 1);
+        sendParams.leftMargin = dp(9);
+        actions.addView(sendButton, sendParams);
+        sendButton.setOnClickListener(v -> sendTypedMessage());
+        composer.addView(actions, matchWidth());
+        root.addView(composer, matchWidth());
+
+        TextView providerLine = label("AI  ·  DeepSeek  /  OpenAI  /  Gemini", 10, MUTED, false);
+        providerLine.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams providerParams = wrap();
+        providerParams.topMargin = dp(13);
+        root.addView(providerLine, providerParams);
+
+        Button settingsToggle = new Button(this);
+        settingsToggle.setText("IMPOSTAZIONI  ⚙");
+        styleButton(settingsToggle, false);
+        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+        toggleParams.topMargin = dp(10);
+        root.addView(settingsToggle, toggleParams);
+
+        settingsPanel = panel();
+        settingsPanel.setOrientation(LinearLayout.VERTICAL);
+        settingsPanel.setPadding(dp(15), dp(15), dp(15), dp(15));
+        settingsPanel.setVisibility(View.GONE);
+        TextView settingsTitle = label("COLLEGA I TUOI SERVIZI AI", 13, Color.WHITE, true);
+        settingsPanel.addView(settingsTitle, wrap());
+
+        providerStatus = label("Provider: non configurato", 11, MUTED, false);
+        providerStatus.setPadding(0, dp(6), 0, dp(8));
+        settingsPanel.addView(providerStatus, matchWidth());
 
         providerSpinner = new Spinner(this);
-        String[] providers = {"AUTO (DeepSeek, poi OpenAI, poi Gemini)",
+        String[] providers = {"AUTO · DeepSeek, OpenAI, Gemini",
                 "DEEPSEEK", "OPENAI", "GEMINI"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, providers);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         providerSpinner.setAdapter(adapter);
-        layout.addView(providerSpinner, matchWidth());
+        settingsPanel.addView(providerSpinner, matchWidth());
 
-        deepSeekInput = createKeyInput("Chiave API DeepSeek");
-        openAIInput = createKeyInput("Chiave API OpenAI");
-        geminiInput = createKeyInput("Chiave API Gemini");
-        layout.addView(deepSeekInput, matchWidth());
-        layout.addView(openAIInput, matchWidth());
-        layout.addView(geminiInput, matchWidth());
+        keyStatus = label("Le chiavi salvate sono protette sul dispositivo.", 10, MUTED, false);
+        keyStatus.setPadding(0, dp(8), 0, dp(3));
+        settingsPanel.addView(keyStatus, matchWidth());
+
+        deepSeekInput = createKeyInput("Nuova chiave API DeepSeek");
+        openAIInput = createKeyInput("Nuova chiave API OpenAI");
+        geminiInput = createKeyInput("Nuova chiave API Gemini");
+        settingsPanel.addView(deepSeekInput, matchWidth());
+        settingsPanel.addView(openAIInput, matchWidth());
+        settingsPanel.addView(geminiInput, matchWidth());
+
+        TextView keyHint = label("Inserisci solo le chiavi nuove. I campi vuoti mantengono quelle già salvate.", 10,
+                MUTED, false);
+        settingsPanel.addView(keyHint, matchWidth());
 
         Button saveButton = new Button(this);
-        saveButton.setText("SALVA LE CHIAVI SUL TELEFONO");
+        saveButton.setText("SALVA CONFIGURAZIONE");
+        styleButton(saveButton, true);
+        settingsPanel.addView(saveButton, fullButtonParams());
         saveButton.setOnClickListener(v -> saveAIConfiguration());
-        layout.addView(saveButton, matchWidth());
 
-        TextView privacy = createLabel("Le chiavi vengono cifrate e conservate sul telefono. "
-                + "Le richieste vengono inviate soltanto al provider selezionato. "
-                + "Le API possono comportare costi secondo il tuo piano: verifica "
-                + "tariffe e limiti del provider prima dell'uso.");
-        privacy.setTextSize(12);
-        layout.addView(privacy);
+        Button deleteKeysButton = new Button(this);
+        deleteKeysButton.setText("ELIMINA TUTTE LE CHIAVI");
+        styleButton(deleteKeysButton, false);
+        settingsPanel.addView(deleteKeysButton, fullButtonParams());
+        deleteKeysButton.setOnClickListener(v -> confirmDeleteKeys());
 
         Button clearMemoryButton = new Button(this);
         clearMemoryButton.setText("CANCELLA MEMORIA LOCALE");
-        clearMemoryButton.setOnClickListener(v -> {
-            memory.clearMemory();
-            Toast.makeText(this, "Memoria locale cancellata.", Toast.LENGTH_SHORT).show();
+        styleButton(clearMemoryButton, false);
+        settingsPanel.addView(clearMemoryButton, fullButtonParams());
+        clearMemoryButton.setOnClickListener(v -> confirmClearMemory());
+
+        TextView privacy = label("Privacy: chiavi e cronologia restano sul telefono. I messaggi vengono inviati al servizio AI scelto per generare le risposte. Le API possono avere costi secondo il piano del provider. NOVA non effettua chiamate a pagamento senza una tua richiesta.", 10,
+                MUTED, false);
+        privacy.setPadding(0, dp(10), 0, 0);
+        settingsPanel.addView(privacy, matchWidth());
+        LinearLayout.LayoutParams settingsParams = matchWidth();
+        settingsParams.topMargin = dp(10);
+        root.addView(settingsPanel, settingsParams);
+
+        settingsToggle.setOnClickListener(v -> {
+            settingsPanel.setVisibility(settingsPanel.getVisibility() == View.VISIBLE
+                    ? View.GONE : View.VISIBLE);
+            settingsToggle.setText(settingsPanel.getVisibility() == View.VISIBLE
+                    ? "CHIUDI IMPOSTAZIONI  ×" : "IMPOSTAZIONI  ⚙");
         });
-        layout.addView(clearMemoryButton, matchWidth());
 
-        scroll.addView(layout);
-        setContentView(scroll);
+        page.addView(root);
+        setContentView(page);
     }
 
-    private LinearLayout.LayoutParams matchWidth() {
-        return new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
+    private LinearLayout panel() {
+        LinearLayout box = new LinearLayout(this);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(PANEL);
+        bg.setCornerRadius(dp(20));
+        bg.setStroke(dp(1), Color.rgb(30, 39, 47));
+        box.setBackground(bg);
+        return box;
     }
 
-    private TextView createLabel(String value) {
-        TextView label = new TextView(this);
-        label.setText(value);
-        label.setTextColor(0xFFFFFFFF);
-        label.setTextSize(16);
-        label.setPadding(0, 12, 0, 12);
-        return label;
+    private TextView label(String text, float size, int color, boolean bold) {
+        TextView view = new TextView(this);
+        view.setText(text);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        view.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
+        return view;
+    }
+
+    private void styleButton(Button button, boolean primary) {
+        button.setAllCaps(false);
+        button.setTextSize(12);
+        button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        button.setTextColor(primary ? BG : Color.WHITE);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(16));
+        bg.setColor(primary ? GREEN : Color.rgb(25, 31, 39));
+        if (!primary) bg.setStroke(dp(1), Color.rgb(48, 59, 67));
+        button.setBackground(bg);
+        button.setPadding(dp(10), 0, dp(10), 0);
     }
 
     private EditText createKeyInput(String hint) {
         EditText input = new EditText(this);
         input.setHint(hint);
         input.setSingleLine(true);
-        input.setTextColor(0xFFFFFFFF);
-        input.setHintTextColor(0xFFAAAAAA);
-        input.setInputType(InputType.TYPE_CLASS_TEXT
-                | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        input.setTextColor(Color.WHITE);
+        input.setHintTextColor(MUTED);
+        input.setTextSize(13);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         return input;
+    }
+
+    private LinearLayout.LayoutParams matchWidth() {
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    private LinearLayout.LayoutParams wrap() {
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    private LinearLayout.LayoutParams fullButtonParams() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+        p.topMargin = dp(8);
+        return p;
+    }
+
+    private int dp(float value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private void loadAIConfiguration() {
         try {
             setSpinnerProvider(keyStore.getSelectedProvider());
-            setInputValue(deepSeekInput, keyStore.getKey("DEEPSEEK"));
-            setInputValue(openAIInput, keyStore.getKey("OPENAI"));
-            setInputValue(geminiInput, keyStore.getKey("GEMINI"));
             rebuildAIManager();
+            updateKeyStatus();
         } catch (Exception e) {
-            status.setText("Configurazione da completare: " + safeMessage(e));
+            status.setText("CONFIGURAZIONE DA COMPLETARE");
+            providerStatus.setText("Errore nel caricamento delle chiavi: " + safeMessage(e));
         }
     }
 
-    private void setInputValue(EditText input, String value) {
-        input.setText(value == null ? "" : value);
+    private void updateKeyStatus() throws Exception {
+        boolean deep = hasKey("DEEPSEEK");
+        boolean open = hasKey("OPENAI");
+        boolean gemini = hasKey("GEMINI");
+        keyStatus.setText("Chiavi presenti: DeepSeek " + yesNo(deep)
+                + "  ·  OpenAI " + yesNo(open) + "  ·  Gemini " + yesNo(gemini));
+    }
+
+    private String yesNo(boolean value) {
+        return value ? "✓" : "—";
+    }
+
+    private boolean hasKey(String provider) throws Exception {
+        String key = keyStore.getKey(provider);
+        return key != null && !key.trim().isEmpty();
     }
 
     private void setSpinnerProvider(String provider) {
-        String wanted = provider == null ? "AUTO" : provider.toUpperCase();
+        String wanted = provider == null ? "AUTO" : provider.toUpperCase(Locale.ROOT);
         int position = 0;
         if ("DEEPSEEK".equals(wanted)) position = 1;
         if ("OPENAI".equals(wanted)) position = 2;
@@ -211,25 +402,25 @@ public class MainActivity extends Activity {
 
     private void saveAIConfiguration() {
         try {
-            saveOrDeleteKey("DEEPSEEK", deepSeekInput);
-            saveOrDeleteKey("OPENAI", openAIInput);
-            saveOrDeleteKey("GEMINI", geminiInput);
+            saveIfProvided("DEEPSEEK", deepSeekInput);
+            saveIfProvided("OPENAI", openAIInput);
+            saveIfProvided("GEMINI", geminiInput);
             keyStore.setSelectedProvider(selectedProvider());
+            deepSeekInput.setText("");
+            openAIInput.setText("");
+            geminiInput.setText("");
             rebuildAIManager();
-            Toast.makeText(this, "Configurazione salvata in modo cifrato sul telefono.",
-                    Toast.LENGTH_LONG).show();
+            updateKeyStatus();
+            Toast.makeText(this, "Configurazione salvata sul dispositivo.", Toast.LENGTH_LONG).show();
         } catch (Exception e) {
-            status.setText("Salvataggio non riuscito: " + safeMessage(e));
+            Toast.makeText(this, "Salvataggio non riuscito: " + safeMessage(e),
+                    Toast.LENGTH_LONG).show();
         }
     }
 
-    private void saveOrDeleteKey(String provider, EditText input) throws Exception {
+    private void saveIfProvided(String provider, EditText input) throws Exception {
         String value = input.getText().toString().trim();
-        if (value.isEmpty()) {
-            keyStore.deleteKey(provider);
-        } else {
-            keyStore.saveKey(provider, value);
-        }
+        if (!value.isEmpty()) keyStore.saveKey(provider, value);
     }
 
     private void rebuildAIManager() throws Exception {
@@ -239,9 +430,80 @@ public class MainActivity extends Activity {
                 keyStore.getKey("DEEPSEEK"),
                 keyStore.getKey("GEMINI"));
         AIProvider provider = aiManager.getProvider();
-        status.setText(provider == null
-                ? "Inserisci almeno una chiave API per iniziare."
-                : "Pronta · provider selezionato: " + provider.getProviderName());
+        String selected = keyStore.getSelectedProvider();
+        if (provider == null) {
+            status.setText("PRONTA · CONFIGURA UN SERVIZIO AI");
+            providerStatus.setText("Nessun provider disponibile per la scelta " + selected + ".");
+        } else {
+            status.setText("PRONTA · " + provider.getProviderName().toUpperCase(Locale.ROOT));
+            providerStatus.setText("Provider attivo: " + provider.getProviderName()
+                    + "  ·  modalità " + selected);
+        }
+    }
+
+    private void confirmDeleteKeys() {
+        new AlertDialog.Builder(this)
+                .setTitle("Eliminare le chiavi API?")
+                .setMessage("Le chiavi salvate sul telefono verranno cancellate. Questa operazione non è reversibile.")
+                .setNegativeButton("ANNULLA", null)
+                .setPositiveButton("ELIMINA", (dialog, which) -> {
+                    keyStore.deleteKey("DEEPSEEK");
+                    keyStore.deleteKey("OPENAI");
+                    keyStore.deleteKey("GEMINI");
+                    keyStore.setSelectedProvider("AUTO");
+                    try {
+                        setSpinnerProvider("AUTO");
+                        rebuildAIManager();
+                        updateKeyStatus();
+                        Toast.makeText(this, "Chiavi eliminate.", Toast.LENGTH_SHORT).show();
+                    } catch (Exception e) {
+                        status.setText("Errore configurazione.");
+                    }
+                }).show();
+    }
+
+    private void confirmClearMemory() {
+        new AlertDialog.Builder(this)
+                .setTitle("Cancellare la memoria?")
+                .setMessage("La cronologia locale di NOVA verrà eliminata dal telefono.")
+                .setNegativeButton("ANNULLA", null)
+                .setPositiveButton("CANCELLA", (dialog, which) -> {
+                    memory.clearMemory();
+                    chatHistory.removeAllViews();
+                    TextView empty = label("Memoria cancellata. Ricominciamo da qui.", 14,
+                            Color.rgb(220, 226, 232), false);
+                    chatHistory.addView(empty, matchWidth());
+                    conversation = empty;
+                }).show();
+    }
+
+    private void restoreConversation() {
+        JSONArray messages = memory.getMessages();
+        chatHistory.removeAllViews();
+        if (messages.length() == 0) {
+            TextView welcome = label("Ciao, sono NOVA. Puoi parlarmi oppure scrivermi qui sotto.",
+                    14, Color.rgb(220, 226, 232), false);
+            chatHistory.addView(welcome, matchWidth());
+            conversation = welcome;
+            return;
+        }
+        int start = Math.max(0, messages.length() - 8);
+        for (int i = start; i < messages.length(); i++) {
+            JSONObject item = messages.optJSONObject(i);
+            if (item == null) continue;
+            String role = item.optString("role", "user");
+            String body = item.optString("content", "");
+            addChatLine(role, body);
+        }
+    }
+
+    private void addChatLine(String role, String body) {
+        boolean assistant = "assistant".equals(role);
+        TextView line = label((assistant ? "NOVA  ·  " : "TU  ·  ") + body,
+                14, assistant ? Color.rgb(226, 235, 233) : Color.rgb(178, 192, 202), false);
+        line.setPadding(0, dp(8), 0, dp(8));
+        chatHistory.addView(line, matchWidth());
+        conversation = line;
     }
 
     private void initializeTextToSpeech() {
@@ -256,37 +518,36 @@ public class MainActivity extends Activity {
 
     private void initializeSpeech() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            status.setText("Riconoscimento vocale non disponibile su questo dispositivo.");
             listenButton.setEnabled(false);
+            listenButton.setText("VOCE NON DISPONIBILE");
             return;
         }
-
         recognizer = SpeechRecognizer.createSpeechRecognizer(this);
         recognizer.setRecognitionListener(new RecognitionListener() {
             @Override public void onReadyForSpeech(Bundle params) {
-                status.setText("NOVA ti sta ascoltando...");
+                status.setText("TI STO ASCOLTANDO");
             }
             @Override public void onBeginningOfSpeech() {
-                status.setText("Ti sto ascoltando...");
+                status.setText("TI STO ASCOLTANDO...");
             }
             @Override public void onRmsChanged(float value) { }
             @Override public void onBufferReceived(byte[] buffer) { }
             @Override public void onEndOfSpeech() {
-                status.setText("Sto elaborando la richiesta...");
+                status.setText("STO PREPARANDO LA RISPOSTA");
             }
             @Override public void onError(int error) {
-                status.setText("Non ho ricevuto la voce. Premi e riprova.");
-                listenButton.setEnabled(true);
+                setControlsEnabled(true);
+                status.setText("NON HO RICEVUTO LA VOCE · RIPROVA");
             }
             @Override public void onResults(Bundle results) {
                 ArrayList<String> matches = results.getStringArrayList(
                         SpeechRecognizer.RESULTS_RECOGNITION);
-                listenButton.setEnabled(true);
                 if (matches != null && !matches.isEmpty()) {
                     messageInput.setText(matches.get(0));
                     sendMessage(matches.get(0));
                 } else {
-                    status.setText("Non ho capito. Riprova.");
+                    setControlsEnabled(true);
+                    status.setText("NON HO CAPITO · RIPROVA");
                 }
             }
             @Override public void onPartialResults(Bundle results) { }
@@ -295,67 +556,67 @@ public class MainActivity extends Activity {
     }
 
     private void startListening() {
+        if (requestInProgress) return;
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},
-                    AUDIO_PERMISSION);
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, AUDIO_PERMISSION);
             return;
         }
         if (recognizer == null) {
-            status.setText("Riconoscimento vocale non disponibile.");
+            status.setText("RICONOSCIMENTO VOCALE NON DISPONIBILE");
             return;
         }
-
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "it-IT");
         intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
-        listenButton.setEnabled(false);
+        setControlsEnabled(false);
         try {
             recognizer.startListening(intent);
         } catch (Exception e) {
-            listenButton.setEnabled(true);
-            status.setText("Impossibile avviare il microfono: " + safeMessage(e));
+            setControlsEnabled(true);
+            status.setText("MICROFONO NON DISPONIBILE");
         }
     }
 
     private void sendTypedMessage() {
-        String message = messageInput.getText().toString().trim();
-        sendMessage(message);
+        sendMessage(messageInput.getText().toString().trim());
     }
 
     private void sendMessage(String message) {
         if (message == null || message.trim().isEmpty()) {
-            status.setText("Scrivi o pronuncia prima un messaggio.");
+            status.setText("SCRIVI O PRONUNCIA UN MESSAGGIO");
+            setControlsEnabled(true);
             return;
         }
         if (aiManager == null || !aiManager.isProviderAvailable()) {
-            status.setText("Configura e salva almeno una chiave API.");
+            status.setText("CONFIGURA UNA CHIAVE API NELLE IMPOSTAZIONI");
+            setControlsEnabled(true);
             return;
         }
-
-        sendButton.setEnabled(false);
-        listenButton.setEnabled(false);
-        conversation.setText("Tu: " + message);
-        status.setText("NOVA sta contattando " + aiManager.getProvider().getProviderName() + "...");
+        requestInProgress = true;
+        setControlsEnabled(false);
+        addChatLine("user", message);
         memory.saveMessage("user", message);
-
+        AIProvider active = aiManager.getProvider();
+        status.setText("NOVA STA PENSANDO · " + active.getProviderName().toUpperCase(Locale.ROOT));
         aiManager.sendMessage(message, new AIProvider.ResponseCallback() {
             @Override public void onSuccess(String response) {
                 runOnUiThread(() -> {
-                    conversation.setText("NOVA: " + response);
-                    status.setText("Risposta ricevuta.");
+                    requestInProgress = false;
+                    addChatLine("assistant", response);
                     memory.saveMessage("assistant", response);
+                    status.setText("RISPOSTA PRONTA");
                     speak(response);
                     setControlsEnabled(true);
                 });
             }
-
             @Override public void onError(String error) {
                 runOnUiThread(() -> {
-                    conversation.setText(error);
-                    status.setText("Richiesta non riuscita.");
+                    requestInProgress = false;
+                    addChatLine("assistant", "Non sono riuscita a completare la richiesta. " + error);
+                    status.setText("RICHIESTA NON RIUSCITA");
                     setControlsEnabled(true);
                 });
             }
@@ -363,8 +624,8 @@ public class MainActivity extends Activity {
     }
 
     private void setControlsEnabled(boolean enabled) {
-        sendButton.setEnabled(enabled);
-        listenButton.setEnabled(enabled);
+        if (sendButton != null) sendButton.setEnabled(enabled);
+        if (listenButton != null) listenButton.setEnabled(enabled);
     }
 
     private void speak(String message) {
@@ -381,12 +642,13 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions,
                                            int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == AUDIO_PERMISSION && grantResults.length > 0
-                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startListening();
-        } else if (requestCode == AUDIO_PERMISSION) {
-            status.setText("Permesso microfono non concesso.");
-            listenButton.setEnabled(true);
+        if (requestCode == AUDIO_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                startListening();
+            } else {
+                status.setText("PERMESSO MICROFONO NON CONCESSO");
+                setControlsEnabled(true);
+            }
         }
     }
 
@@ -403,5 +665,87 @@ public class MainActivity extends Activity {
             textToSpeech = null;
         }
         super.onDestroy();
+    }
+
+    private final class OrbView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private float rotation = 0f;
+        private android.animation.ValueAnimator animator;
+
+        OrbView(Activity context) {
+            super(context);
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+            animator = android.animation.ValueAnimator.ofFloat(0f, 360f);
+            animator.setDuration(24000);
+            animator.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            animator.setInterpolator(new DecelerateInterpolator());
+            animator.addUpdateListener(value -> {
+                rotation = (Float) value.getAnimatedValue();
+                invalidate();
+            });
+            animator.start();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float cx = getWidth() / 2f;
+            float cy = getHeight() / 2f;
+            float radius = Math.min(getWidth(), getHeight()) * 0.39f;
+
+            paint.setShader(new RadialGradient(cx, cy, radius * 1.55f,
+                    new int[]{0x5530FFD0, 0x2220BFAF, 0x0010A0A0},
+                    null, Shader.TileMode.CLAMP));
+            canvas.drawCircle(cx, cy, radius * 1.55f, paint);
+            paint.setShader(null);
+
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(1.2f));
+            paint.setColor(0x6639F5C2);
+            canvas.drawCircle(cx, cy, radius * 1.13f, paint);
+            paint.setColor(0x3339F5C2);
+            canvas.drawCircle(cx, cy, radius * 1.22f, paint);
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setShader(new RadialGradient(cx - radius * 0.32f, cy - radius * 0.38f,
+                    radius * 1.55f,
+                    new int[]{0xFF344C50, 0xFF17242B, 0xFF080D13},
+                    new float[]{0f, 0.48f, 1f}, Shader.TileMode.CLAMP));
+            canvas.drawCircle(cx, cy, radius, paint);
+            paint.setShader(null);
+
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(1.4f));
+            paint.setColor(0xAA91FFE0);
+            canvas.drawCircle(cx, cy, radius, paint);
+            paint.setColor(0x4476EED0);
+            paint.setStrokeWidth(dp(5));
+            canvas.drawArc(cx - radius + dp(5), cy - radius + dp(5),
+                    cx + radius - dp(5), cy + radius - dp(5),
+                    rotation, 105, false, paint);
+
+            canvas.save();
+            canvas.rotate(rotation * 0.12f, cx, cy);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTextSize(radius * 1.18f);
+            paint.setColor(GREEN);
+            paint.setShadowLayer(dp(18), 0, 0, 0xCC00FFAA);
+            canvas.drawText("N", cx, cy + radius * 0.39f, paint);
+            paint.clearShadowLayer();
+            canvas.restore();
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(0x66FFFFFF);
+            canvas.drawCircle(cx - radius * 0.37f, cy - radius * 0.48f, dp(5), paint);
+            canvas.drawCircle(cx - radius * 0.25f, cy - radius * 0.56f, dp(2), paint);
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            if (animator != null) animator.cancel();
+            super.onDetachedFromWindow();
+        }
     }
 }
