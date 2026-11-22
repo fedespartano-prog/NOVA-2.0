@@ -1,7 +1,7 @@
 package com.novatwo.assistant;
 
 import android.Manifest;
-import android.app.Activity;
+import androidx.fragment.app.FragmentActivity;
 import androidx.biometric.BiometricManager;
 import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
@@ -49,7 +49,7 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Locale;
 
-public class MainActivity extends Activity {
+public class MainActivity extends FragmentActivity {
 
     private static final int AUDIO_PERMISSION = 100;
     private static final int BG = Color.rgb(5, 7, 11);
