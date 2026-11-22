@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.widget.Button;
@@ -37,6 +38,7 @@ public class GoogleServicesActivity extends Activity {
     private TextView status;
     private String pendingService = "";
     private EditText emailTo, emailSubject, emailBody;
+    private static final int REQUEST_SHARE_DRIVE = 8203;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -63,6 +65,16 @@ public class GoogleServicesActivity extends Activity {
         root.addView(status);
         addAction(root,"COLLEGA E LEGGI GMAIL", "GMAIL", Arrays.asList(new Scope("https://www.googleapis.com/auth/gmail.readonly")));
         addAction(root,"COLLEGA E LEGGI FILE DRIVE", "DRIVE", Arrays.asList(new Scope("https://www.googleapis.com/auth/drive.metadata.readonly")));
+
+        Button driveUpload = new Button(this);
+        driveUpload.setText("SELEZIONA E CARICA UN FILE SU DRIVE");
+        root.addView(driveUpload, new LinearLayout.LayoutParams(-1,-2));
+        driveUpload.setOnClickListener(v -> {
+            Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            pick.setType("*/*");
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+            startActivityForResult(pick, REQUEST_SHARE_DRIVE);
+        });
         addAction(root,"COLLEGA E LEGGI CALENDARIO", "CALENDAR", Arrays.asList(new Scope("https://www.googleapis.com/auth/calendar.readonly")));
 
         TextView composeTitle = new TextView(this);
@@ -141,6 +153,22 @@ public class GoogleServicesActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_SHARE_DRIVE) {
+            if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+                status.setText("Selezione file annullata.");
+                return;
+            }
+            Uri selected = data.getData();
+            String mime = getContentResolver().getType(selected);
+            if (mime == null) mime = "*/*";
+            Intent share = new Intent(Intent.ACTION_SEND);
+            share.setType(mime);
+            share.putExtra(Intent.EXTRA_STREAM, selected);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            status.setText("Scegli Google Drive nel menu di condivisione per caricare il file.");
+            startActivity(Intent.createChooser(share, "Carica file su Google Drive"));
+            return;
+        }
         if (requestCode != REQUEST_AUTH) return;
         if (resultCode != RESULT_OK || data == null) {
             status.setText("Collegamento Google annullato.");
