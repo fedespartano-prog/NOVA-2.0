@@ -177,11 +177,11 @@ public class GoogleServicesActivity extends Activity {
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {
-                String mime = "To: " + to + "\\r\\n"
-                        + "Subject: " + subject + "\\r\\n"
-                        + "MIME-Version: 1.0\\r\\n"
-                        + "Content-Type: text/plain; charset=UTF-8\\r\\n"
-                        + "Content-Transfer-Encoding: 8bit\\r\\n\\r\\n" + body;
+                String mime = "To: " + to + "\r\n"
+                        + "Subject: " + subject + "\r\n"
+                        + "MIME-Version: 1.0\r\n"
+                        + "Content-Type: text/plain; charset=UTF-8\r\n"
+                        + "Content-Transfer-Encoding: 8bit\r\n\r\n" + body;
                 String encoded = Base64.encodeToString(
                         mime.getBytes(StandardCharsets.UTF_8),
                         Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
