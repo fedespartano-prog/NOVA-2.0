@@ -260,6 +260,11 @@ public class MainActivity extends FragmentActivity {
                     .setView(chatDialogContent)
                     .setNegativeButton("CHIUDI", null)
                     .create();
+            dialog.setOnDismissListener(ignored -> {
+                if (chatDialogContent.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) chatDialogContent.getParent()).removeView(chatDialogContent);
+                }
+            });
             dialog.show();
             if (dialog.getWindow() != null) {
                 dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -410,6 +415,11 @@ public class MainActivity extends FragmentActivity {
                     .setView(settingsScroll)
                     .setNegativeButton("CHIUDI", null)
                     .create();
+            dialog.setOnDismissListener(ignored -> {
+                if (settingsScroll.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) settingsScroll.getParent()).removeView(settingsScroll);
+                }
+            });
             dialog.show();
             if (dialog.getWindow() != null) {
                 dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
