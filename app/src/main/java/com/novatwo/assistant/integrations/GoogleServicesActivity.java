@@ -382,6 +382,7 @@ public class GoogleServicesActivity extends Activity {
                         if (index >= 0) fileName = cursor.getString(index);
                     }
                 }
+                final String uploadName = fileName;
                 String mime = getContentResolver().getType(uri);
                 if (mime == null) mime = "application/octet-stream";
                 String boundary = "NOVA_" + java.util.UUID.randomUUID().toString().replace("-", "");
@@ -394,7 +395,7 @@ public class GoogleServicesActivity extends Activity {
                 connection.setRequestProperty("Authorization", "Bearer " + token);
                 connection.setRequestProperty("Content-Type", "multipart/related; boundary=" + boundary);
                 try (java.io.OutputStream out = connection.getOutputStream()) {
-                    String metadata = new JSONObject().put("name", fileName).toString();
+                    String metadata = new JSONObject().put("name", uploadName).toString();
                     out.write(("--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
                             + metadata + "\r\n").getBytes(StandardCharsets.UTF_8));
                     out.write(("--" + boundary + "\r\nContent-Type: " + mime + "\r\n\r\n")
@@ -422,7 +423,7 @@ public class GoogleServicesActivity extends Activity {
                     throw new Exception("Google Drive HTTP " + code + ": " + response);
                 }
                 JSONObject uploaded = new JSONObject(response.toString());
-                String result = "File caricato su Google Drive: " + uploaded.optString("name", fileName);
+                String result = "File caricato su Google Drive: " + uploaded.optString("name", uploadName);
                 runOnUiThread(() -> status.setText(result));
             } catch (Exception e) {
                 String message = "Caricamento Drive non riuscito: " + safe(e.getMessage());
