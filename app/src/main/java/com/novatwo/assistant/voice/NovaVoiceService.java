@@ -5,6 +5,8 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.media.AudioManager;
+import android.media.AudioRecordingConfiguration;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
@@ -37,10 +39,14 @@ public class NovaVoiceService extends Service {
     private boolean listening;
     private boolean waitingForReply;
     private boolean destroyed;
+    private boolean pausedForOtherApp;
+    private AudioManager audioManager;
+    private AudioManager.AudioRecordingCallback recordingCallback;
 
     @Override public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        registerRecordingMonitor();
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -100,6 +106,73 @@ public class NovaVoiceService extends Service {
         }
     }
 
+    private void registerRecordingMonitor() {
+        if (Build.VERSION.SDK_INT < 29) return;
+        audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (audioManager == null) return;
+        recordingCallback = new AudioManager.AudioRecordingCallback() {
+            @Override public void onRecordingConfigChanged(java.util.List<AudioRecordingConfiguration> configs) {
+                boolean externalRecorder = false;
+                if (configs != null) {
+                    for (AudioRecordingConfiguration config : configs) {
+                        if (config == null) continue;
+                        String packageName = config.getClientPackageName();
+                        if (packageName == null || packageName.equals(getPackageName())) continue;
+                        if (packageName.equals("com.google.android.googlequicksearchbox")
+                                || packageName.equals("com.google.android.tts")
+                                || packageName.equals("com.google.android.as")
+                                || packageName.equals("com.android.speech")) continue;
+                        externalRecorder = true;
+                        break;
+                    }
+                }
+                if (externalRecorder) pauseForExternalRecording();
+                else resumeAfterExternalRecording();
+            }
+        };
+        audioManager.registerAudioRecordingCallback(recordingCallback, handler);
+    }
+
+    private void pauseForExternalRecording() {
+        if (!active || pausedForOtherApp) return;
+        pausedForOtherApp = true;
+        listening = false;
+        if (recognizer != null) {
+            try { recognizer.cancel(); } catch (RuntimeException ignored) { }
+        }
+        updateNotification("Microfono occupato da un'altra app · NOVA riprenderà da sola");
+    }
+
+    private void resumeAfterExternalRecording() {
+        if (!active || !pausedForOtherApp) return;
+        pausedForOtherApp = false;
+        updateNotification("NOVA è di nuovo in ascolto · chiamata attiva");
+        handler.postDelayed(() -> {
+            if (active && !pausedForOtherApp && !waitingForReply) beginListening();
+        }, 900);
+    }
+
+    private void updateNotification(String message) {
+        Intent openApp = new Intent(this, MainActivity.class);
+        openApp.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent openPending = PendingIntent.getActivity(this, 2042, openApp,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
+        Intent stop = new Intent(this, NovaVoiceService.class);
+        stop.setAction(ACTION_STOP);
+        PendingIntent stopPending = PendingIntent.getService(this, 2043, stop,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
+        Notification.Builder builder = Build.VERSION.SDK_INT >= 26
+                ? new Notification.Builder(this, CHANNEL_ID) : new Notification.Builder(this);
+        Notification notification = builder.setSmallIcon(R.drawable.nova_ic_launcher)
+                .setContentTitle("NOVA · chiamata attiva")
+                .setContentText(message).setContentIntent(openPending).setOngoing(true)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "CHIUDI CHIAMATA", stopPending).build();
+        if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+        else startForeground(NOTIFICATION_ID, notification);
+    }
+
     private void ensureRecognizer() {
         if (recognizer != null || !SpeechRecognizer.isRecognitionAvailable(this)) return;
         recognizer = SpeechRecognizer.createSpeechRecognizer(this);
@@ -111,7 +184,7 @@ public class NovaVoiceService extends Service {
             @Override public void onEndOfSpeech() { listening = false; }
             @Override public void onError(int error) {
                 listening = false;
-                if (active && !waitingForReply && error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                if (active && !waitingForReply && !pausedForOtherApp && error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                     handler.postDelayed(() -> beginListening(), error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ? 1400 : 850);
                 }
             }
@@ -122,7 +195,7 @@ public class NovaVoiceService extends Service {
                     String phrase = matches.get(0);
                     waitingForReply = true;
                     sendEvent(ACTION_TRANSCRIPT, phrase);
-                } else if (active && !waitingForReply) {
+                } else if (active && !waitingForReply && !pausedForOtherApp) {
                     handler.postDelayed(() -> beginListening(), 500);
                 }
             }
@@ -132,7 +205,7 @@ public class NovaVoiceService extends Service {
     }
 
     private void beginListening() {
-        if (!active || destroyed || waitingForReply || listening) return;
+        if (!active || destroyed || waitingForReply || pausedForOtherApp || listening) return;
         ensureRecognizer();
         if (recognizer == null) return;
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
@@ -160,7 +233,12 @@ public class NovaVoiceService extends Service {
     private void stopSession() {
         active = false;
         waitingForReply = false;
+        pausedForOtherApp = false;
         handler.removeCallbacksAndMessages(null);
+        if (audioManager != null && recordingCallback != null && Build.VERSION.SDK_INT >= 29) {
+            audioManager.unregisterAudioRecordingCallback(recordingCallback);
+            recordingCallback = null;
+        }
         if (recognizer != null) {
             recognizer.cancel();
             recognizer.destroy();
@@ -175,6 +253,10 @@ public class NovaVoiceService extends Service {
         destroyed = true;
         active = false;
         handler.removeCallbacksAndMessages(null);
+        if (audioManager != null && recordingCallback != null && Build.VERSION.SDK_INT >= 29) {
+            audioManager.unregisterAudioRecordingCallback(recordingCallback);
+            recordingCallback = null;
+        }
         if (recognizer != null) {
             recognizer.cancel();
             recognizer.destroy();
