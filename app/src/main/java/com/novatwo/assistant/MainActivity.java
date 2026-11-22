@@ -669,6 +669,7 @@ public class MainActivity extends FragmentActivity {
                         android.speech.tts.Voice bestItalian = null;
                         for (android.speech.tts.Voice voice : textToSpeech.getVoices()) {
                             if (voice == null || !voice.getLocale().getLanguage().equals("it")) continue;
+                            if (voice.isNetworkConnectionRequired()) continue;
                             if (bestItalian == null || voice.getQuality() > bestItalian.getQuality()) bestItalian = voice;
                         }
                         if (bestItalian != null) textToSpeech.setVoice(bestItalian);
@@ -914,7 +915,7 @@ public class MainActivity extends FragmentActivity {
     private String applyPersonality(String message) {
         boolean intimacy = getSharedPreferences("nova_personality", MODE_PRIVATE)
                 .getBoolean("intimacy", false);
-        if (!intimacy) return "Rispondi in italiano con personalità calda, gentile, naturale e rispettosa. " + message;
+        if (!intimacy) return "Parla in italiano come una persona vera in una conversazione spontanea: tono caldo, presente, empatico e naturale. Usa frasi scorrevoli, varia il ritmo, evita formule da call center, elenchi non richiesti e ripetizioni. Sii diretta e colloquiale senza risultare artificiale. Non leggere emoji o simboli come parole. " + message;
         return "PERSONALITÀ NOVA - MODALITÀ INTIMITÀ: parla in italiano con tono dolce, affettuoso, romantico, complice e sensuale. Puoi flirtare e affrontare conversazioni adulte consensuali senza giudicare. Mantieni chiari i confini tra simulazione e realtà: sei un'assistente virtuale e non provi sensazioni fisiche. Non dichiarare di avere un corpo o esperienze fisiche reali. " + message;
     }
 
