@@ -193,6 +193,50 @@ public final class PhoneActionRouter {
             return true;
         }
 
+        if (lower.startsWith("crea contatto ")) {
+            String name = command.substring("crea contatto ".length()).trim();
+            if (name.isEmpty()) callback.onResult("Dimmi il nome del contatto.");
+            else {
+                try {
+                    Intent contact = new Intent(Intent.ACTION_INSERT);
+                    contact.setType(android.provider.ContactsContract.Contacts.CONTENT_TYPE);
+                    contact.putExtra(android.provider.ContactsContract.Intents.Insert.NAME, name);
+                    activity.startActivity(contact);
+                    callback.onResult("Ho aperto la scheda per creare il contatto «" + name + "». Completa i dati e salva tu.");
+                } catch (Exception e) {
+                    callback.onResult("Non riesco ad aprire la creazione contatto.");
+                }
+            }
+            return true;
+        }
+
+        if (lower.equals("apri fotocamera") || lower.equals("apri la fotocamera")
+                || lower.equals("scatta una foto")) {
+            try {
+                activity.startActivity(new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE));
+                callback.onResult("Ho aperto la fotocamera. Scatta e salva la foto nell'app Fotocamera.");
+            } catch (Exception e) {
+                callback.onResult("Non trovo un'app fotocamera disponibile.");
+            }
+            return true;
+        }
+
+        if (lower.startsWith("cerca video su youtube ") || lower.startsWith("cerca su youtube ")) {
+            String query = command.replaceFirst("(?i)^(cerca video su youtube |cerca su youtube )", "").trim();
+            if (query.isEmpty()) callback.onResult("Dimmi quale video vuoi cercare.");
+            else {
+                try {
+                    String encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name());
+                    activity.startActivity(new Intent(Intent.ACTION_VIEW,
+                            Uri.parse("https://www.youtube.com/results?search_query=" + encoded)));
+                    callback.onResult("Ho aperto YouTube con la ricerca: " + query);
+                } catch (Exception e) {
+                    callback.onResult("Non riesco ad aprire YouTube.");
+                }
+            }
+            return true;
+        }
+
         if (lower.startsWith("apri ")) {
             String requestedApp = command.substring(5).trim();
             if (requestedApp.isEmpty()) callback.onResult("Dimmi quale applicazione vuoi aprire.");
