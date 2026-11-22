@@ -27,6 +27,7 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
+        <activity android:name="com.novatwo.assistant.integrations.GoogleServicesActivity" android:exported="false" />
         <activity android:name="com.novatwo.assistant.media.MediaStudioActivity" android:exported="false" />
         <activity android:name="com.novatwo.assistant.media.MediaAnalysisActivity" android:exported="false" />
 
