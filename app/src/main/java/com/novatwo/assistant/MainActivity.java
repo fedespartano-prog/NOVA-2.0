@@ -680,16 +680,19 @@ public class MainActivity extends FragmentActivity {
                 recognitionActive = false;
                 setControlsEnabled(true);
                 if (continuousVoiceMode && !requestInProgress
-                        && (error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
-                        || error == SpeechRecognizer.ERROR_NO_MATCH)) {
-                    status.setText("ASCOLTO ATTIVO · PUOI PARLARE");
+                        && error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                    status.setText(error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                            || error == SpeechRecognizer.ERROR_NO_MATCH
+                            ? "ASCOLTO ATTIVO · PUOI PARLARE"
+                            : "RIPRISTINO DEL MICROFONO...");
                     if (mainRoot != null) {
+                        long retryDelay = error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ? 1500 : 900;
                         mainRoot.postDelayed(() -> {
-                            if (continuousVoiceMode && !requestInProgress) startListening();
-                        }, 700);
+                            if (continuousVoiceMode && !requestInProgress && !recognitionActive) startListening();
+                        }, retryDelay);
                     }
                 } else {
-                    status.setText("NON HO RICEVUTO LA VOCE · RIPROVA");
+                    status.setText("MICROFONO NON DISPONIBILE · CONTROLLA I PERMESSI");
                 }
             }
             @Override public void onResults(Bundle results) {
