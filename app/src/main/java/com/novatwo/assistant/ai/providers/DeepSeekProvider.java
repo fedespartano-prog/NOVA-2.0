@@ -86,6 +86,9 @@ public class DeepSeekProvider implements AIProvider {
 
                 JSONObject request = new JSONObject();
                 request.put("model", MODEL);
+                request.put("thinking", new JSONObject().put("type", "disabled"));
+                request.put("max_tokens", 2048);
+                request.put("safety_check", new JSONObject().put("level", "high"));
                 request.put("messages", messages);
 
                 byte[] data = request.toString()
