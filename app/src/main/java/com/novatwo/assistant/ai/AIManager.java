@@ -1,16 +1,12 @@
-
 package com.novatwo.assistant.ai;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 public class AIManager {
 
-    private final Map<String, AIProvider> providers =
-            new LinkedHashMap<>();
-
+    private final Map<String, AIProvider> providers = new LinkedHashMap<>();
     private String preferredProvider = "AUTO";
 
     public AIManager() {
@@ -18,28 +14,18 @@ public class AIManager {
 
     public void setProvider(AIProvider provider) {
         providers.clear();
-
-        if (provider != null && isFreeProvider(provider)) {
-            providers.put(
-                    provider.getProviderName().toUpperCase(),
-                    provider
-            );
+        if (provider != null) {
+            providers.put(provider.getProviderName().toUpperCase(), provider);
         }
     }
 
-    public void setProviders(
-            List<AIProvider> availableProviders,
-            String preference
-    ) {
+    public void setProviders(List<AIProvider> availableProviders, String preference) {
         providers.clear();
 
         if (availableProviders != null) {
             for (AIProvider provider : availableProviders) {
-                if (provider != null && isFreeProvider(provider)) {
-                    providers.put(
-                            provider.getProviderName().toUpperCase(),
-                            provider
-                    );
+                if (provider != null && provider.getProviderName() != null) {
+                    providers.put(provider.getProviderName().toUpperCase(), provider);
                 }
             }
         }
@@ -48,11 +34,8 @@ public class AIManager {
     }
 
     public void setPreferredProvider(String preference) {
-        if (preference == null || preference.trim().isEmpty()) {
-            preferredProvider = "AUTO";
-        } else {
-            preferredProvider = preference.trim().toUpperCase();
-        }
+        preferredProvider = preference == null || preference.trim().isEmpty()
+                ? "AUTO" : preference.trim().toUpperCase();
     }
 
     public String getPreferredProvider() {
@@ -67,7 +50,6 @@ public class AIManager {
         for (AIProvider provider : providers.values()) {
             return provider;
         }
-
         return null;
     }
 
@@ -75,95 +57,28 @@ public class AIManager {
         return getProvider() != null;
     }
 
-    private boolean isFreeProvider(AIProvider provider) {
-        String name = provider.getProviderName();
-
-        if (name == null) {
-            return false;
+    public void sendMessage(String prompt, AIProvider.ResponseCallback callback) {
+        if (callback == null) {
+            return;
         }
 
-        return name.toUpperCase().contains("GEMINI");
-    }
-
-    public void sendMessage(
-            String prompt,
-            AIProvider.ResponseCallback callback
-    ) {
         if (prompt == null || prompt.trim().isEmpty()) {
             callback.onError("Il messaggio non può essere vuoto.");
             return;
         }
 
-        List<AIProvider> candidates = new ArrayList<>();
-
-        if ("AUTO".equals(preferredProvider)) {
-            candidates.addAll(providers.values());
-        } else {
-            AIProvider selected = providers.get(preferredProvider);
-
-            if (selected != null) {
-                candidates.add(selected);
-            }
-        }
-
-        if (candidates.isEmpty()) {
-            callback.onError(
-                    "Nessun provider configurato. Controlla la chiave Gemini."
-            );
+        AIProvider provider = getProvider();
+        if (provider == null) {
+            callback.onError("Nessun provider configurato. Inserisci almeno una chiave API.");
             return;
         }
 
-        tryProvider(prompt, callback, candidates, 0);
-    }
-
-    private void tryProvider(
-            String prompt,
-            AIProvider.ResponseCallback callback,
-            List<AIProvider> candidates,
-            int index
-    ) {
-        if (index >= candidates.size()) {
-            callback.onError(
-                    "Errore del provider: nessuna risposta valida ricevuta."
-            );
-            return;
+        // Una richiesta viene inviata a un solo provider: evita chiamate
+        // duplicate e possibili addebiti multipli in caso di errore.
+        try {
+            provider.generateResponse(prompt.trim(), callback);
+        } catch (Exception e) {
+            callback.onError("Errore " + provider.getProviderName() + ": " + e.getMessage());
         }
-
-        AIProvider provider = candidates.get(index);
-
-        provider.generateResponse(
-                prompt,
-                new AIProvider.ResponseCallback() {
-
-                    @Override
-                    public void onSuccess(String response) {
-                        callback.onSuccess(response);
-                    }
-
-                    @Override
-                    public void onError(String error) {
-
-                        String message = error;
-
-                        if (message == null || message.trim().isEmpty()) {
-                            message = "Errore sconosciuto del provider.";
-                        }
-
-                        if (index + 1 >= candidates.size()) {
-                            callback.onError(
-                                    provider.getProviderName()
-                                    + ": " + message
-                            );
-                        } else {
-                            tryProvider(
-                                    prompt,
-                                    callback,
-                                    candidates,
-                                    index + 1
-                            );
-                        }
-                    }
-                }
-        );
     }
 }
