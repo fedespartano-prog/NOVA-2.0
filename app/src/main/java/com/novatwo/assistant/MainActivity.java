@@ -780,7 +780,9 @@ public class MainActivity extends Activity {
     }
 
     private void speak(String message) {
-        if (ttsReady && textToSpeech != null && message != null) {
+        if (ttsReady && textToSpeech != null && message != null
+                && getSharedPreferences("nova_voice_security", MODE_PRIVATE)
+                        .getBoolean("verified_speaker_enabled", false)) {
             textToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, "nova_response");
         }
     }
