@@ -149,9 +149,8 @@ public class MainActivity extends FragmentActivity {
         Button settingsToggle = new Button(this);
         settingsToggle.setText("⚙");
         settingsToggle.setContentDescription("Apri impostazioni NOVA");
-        styleButton(settingsToggle, false);
-        settingsToggle.setTextSize(21);
-        settingsToggle.setPadding(0, 0, 0, 0);
+        styleIconButton(settingsToggle, 23);
+        settingsToggle.setBackgroundColor(Color.TRANSPARENT);
         LinearLayout.LayoutParams gearParams = new LinearLayout.LayoutParams(dp(48), dp(44));
         gearParams.leftMargin = dp(12);
         header.addView(settingsToggle, gearParams);
@@ -186,9 +185,11 @@ public class MainActivity extends FragmentActivity {
 
         callToggleButton = new Button(this);
         updateContinuousVoiceButton();
-        styleButton(callToggleButton, true);
-        LinearLayout.LayoutParams callParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
-        callParams.bottomMargin = dp(14);
+        styleIconButton(callToggleButton, 30);
+        callToggleButton.setBackgroundColor(Color.TRANSPARENT);
+        LinearLayout.LayoutParams callParams = new LinearLayout.LayoutParams(dp(64), dp(58));
+        callParams.gravity = Gravity.CENTER_HORIZONTAL;
+        callParams.bottomMargin = dp(10);
         root.addView(callToggleButton, callParams);
         callToggleButton.setOnClickListener(v -> {
             if (continuousVoiceMode) {
@@ -284,11 +285,13 @@ public class MainActivity extends FragmentActivity {
         chatDialogContent.addView(composer, composerDialogParams);
 
         Button chatToggle = new Button(this);
-        chatToggle.setText("APRI CONVERSAZIONE");
-        styleButton(chatToggle, true);
-        LinearLayout.LayoutParams chatToggleParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
-        chatToggleParams.topMargin = dp(18);
+        chatToggle.setText("☰");
+        chatToggle.setContentDescription("Apri conversazione");
+        styleIconButton(chatToggle, 27);
+        chatToggle.setBackgroundColor(Color.TRANSPARENT);
+        LinearLayout.LayoutParams chatToggleParams = new LinearLayout.LayoutParams(dp(58), dp(54));
+        chatToggleParams.gravity = Gravity.CENTER_HORIZONTAL;
+        chatToggleParams.topMargin = dp(5);
         root.addView(chatToggle, chatToggleParams);
         chatToggle.setOnClickListener(v -> {
             AlertDialog dialog = new AlertDialog.Builder(this)
@@ -501,6 +504,21 @@ public class MainActivity extends FragmentActivity {
         view.setTextColor(color);
         view.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
         return view;
+    }
+
+    private void styleIconButton(Button button, float textSize) {
+        button.setAllCaps(false);
+        button.setTextSize(textSize);
+        button.setTextColor(GREEN);
+        button.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        button.setPadding(0, 0, 0, 0);
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
+        button.setMinimumWidth(0);
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        button.setElevation(0f);
+        button.setStateListAnimator(null);
     }
 
     private void styleButton(Button button, boolean primary) {
@@ -728,7 +746,8 @@ public class MainActivity extends FragmentActivity {
                     : "ATTIVA ASCOLTO CONTINUO");
         }
         if (callToggleButton != null) {
-            callToggleButton.setText(continuousVoiceMode ? "CHIUDI CHIAMATA" : "APRI CHIAMATA");
+            callToggleButton.setText(continuousVoiceMode ? "✕" : "🎙");
+            callToggleButton.setContentDescription(continuousVoiceMode ? "Chiudi chiamata" : "Apri chiamata");
         }
     }
 
