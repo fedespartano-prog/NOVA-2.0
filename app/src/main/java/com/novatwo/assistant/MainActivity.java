@@ -282,7 +282,7 @@ public class MainActivity extends Activity {
         mediaButton.setText("FOTO E VIDEO DAL TELEFONO");
         styleButton(mediaButton, false);
         settingsPanel.addView(mediaButton, fullButtonParams());
-        mediaButton.setOnClickListener(v -> chooseMedia());
+        mediaButton.setOnClickListener(v -> startActivity(new Intent(this, com.novatwo.assistant.media.MediaStudioActivity.class)));
 
         Button clearMemoryButton = new Button(this);
         clearMemoryButton.setText("CANCELLA MEMORIA LOCALE");
