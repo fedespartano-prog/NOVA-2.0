@@ -61,10 +61,10 @@ import java.util.Set;
 public class MainActivity extends FragmentActivity {
 
     private static final int AUDIO_PERMISSION = 100;
-    private static final int BG = Color.rgb(5, 7, 11);
-    private static final int PANEL = Color.rgb(15, 19, 25);
-    private static final int GREEN = Color.rgb(45, 115, 255);
-    private static final int VIOLET = Color.rgb(174, 70, 255);
+    private static final int BG = Color.rgb(3, 7, 13);
+    private static final int PANEL = Color.rgb(8, 16, 25);
+    private static final int GREEN = Color.rgb(0, 190, 255);
+    private static final int VIOLET = Color.rgb(65, 205, 255);
     private static final int MUTED = Color.rgb(139, 151, 163);
 
     private APIKeyStore keyStore;
@@ -143,12 +143,16 @@ public class MainActivity extends FragmentActivity {
         TextView version = label("2.0  /  PERSONAL AI", 10, VIOLET, true);
         version.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
         header.addView(version);
-        root.addView(header, matchWidth());
         Button settingsToggle = new Button(this);
         settingsToggle.setText("⚙");
+        settingsToggle.setContentDescription("Apri impostazioni NOVA");
         styleButton(settingsToggle, false);
-        settingsToggle.setTextSize(20);
-        header.addView(settingsToggle, new LinearLayout.LayoutParams(dp(52), dp(44)));
+        settingsToggle.setTextSize(21);
+        settingsToggle.setPadding(0, 0, 0, 0);
+        LinearLayout.LayoutParams gearParams = new LinearLayout.LayoutParams(dp(48), dp(44));
+        gearParams.leftMargin = dp(12);
+        header.addView(settingsToggle, gearParams);
+        root.addView(header, matchWidth());
 
 
         TextView intro = label("IL TUO ASSISTENTE", 10, GREEN, true);
@@ -487,14 +491,17 @@ public class MainActivity extends FragmentActivity {
     private void styleButton(Button button, boolean primary) {
         button.setAllCaps(false);
         button.setTextSize(12);
+        button.setLetterSpacing(0.035f);
         button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        button.setTextColor(primary ? BG : Color.WHITE);
+        button.setTextColor(primary ? Color.rgb(2, 12, 20) : Color.rgb(225, 246, 255));
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(16));
-        bg.setColor(primary ? Color.rgb(88, 91, 255) : Color.rgb(20, 24, 43));
-        if (!primary) bg.setStroke(dp(1), Color.rgb(77, 91, 180));
+        bg.setCornerRadius(dp(15));
+        bg.setColor(primary ? Color.rgb(0, 177, 239) : Color.rgb(8, 25, 39));
+        bg.setStroke(dp(primary ? 1.5f : 1.2f),
+                primary ? Color.rgb(91, 224, 255) : Color.rgb(0, 145, 205));
         button.setBackground(bg);
         button.setPadding(dp(10), 0, dp(10), 0);
+        button.setElevation(dp(primary ? 5 : 2));
     }
 
     private EditText createKeyInput(String hint) {
@@ -1204,7 +1211,7 @@ public class MainActivity extends FragmentActivity {
             float radius = Math.min(getWidth(), getHeight()) * 0.39f;
 
             paint.setShader(new RadialGradient(cx, cy, radius * 1.65f,
-                    new int[]{0x664D7CFF, 0x334F35FF, 0x00100030},
+                    new int[]{0x6640CFFF, 0x333080C8, 0x00001020},
                     null, Shader.TileMode.CLAMP));
             canvas.drawCircle(cx, cy, radius * 1.55f, paint);
             paint.setShader(null);
@@ -1217,11 +1224,11 @@ public class MainActivity extends FragmentActivity {
             canvas.drawCircle(cx, cy, radius * 1.22f, paint);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dp(2));
-            paint.setColor(0x665E42FF);
+            paint.setColor(0x6650CFFF);
             canvas.drawOval(cx - radius * 0.78f, cy + radius * 0.88f,
                     cx + radius * 0.78f, cy + radius * 1.10f, paint);
             paint.setStrokeWidth(dp(1.3f));
-            paint.setColor(0x445F9CFF);
+            paint.setColor(0x4450CFFF);
             canvas.drawOval(cx - radius * 1.02f, cy + radius * 0.96f,
                     cx + radius * 1.02f, cy + radius * 1.23f, paint);
 
@@ -1237,7 +1244,7 @@ public class MainActivity extends FragmentActivity {
             paint.setStrokeWidth(dp(1.4f));
             paint.setColor(0xAA8DB7FF);
             canvas.drawCircle(cx, cy, radius, paint);
-            paint.setColor(0x665B4BFF);
+            paint.setColor(0x6650CFFF);
             paint.setStrokeWidth(dp(5));
             canvas.drawArc(cx - radius + dp(5), cy - radius + dp(5),
                     cx + radius - dp(5), cy + radius - dp(5),
@@ -1249,8 +1256,8 @@ public class MainActivity extends FragmentActivity {
             paint.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
             paint.setTextAlign(Paint.Align.CENTER);
             paint.setTextSize(radius * 1.18f);
-            paint.setColor(0xFF9D7BFF);
-            paint.setShadowLayer(dp(18), 0, 0, 0xCC6A42FF);
+            paint.setColor(0xFF62DFFF);
+            paint.setShadowLayer(dp(18), 0, 0, 0xCC00AFFF);
             canvas.drawText("N", cx, cy + radius * 0.39f, paint);
             paint.clearShadowLayer();
             canvas.restore();
