@@ -519,10 +519,11 @@ public class MainActivity extends FragmentActivity {
     private void confirmClearMemory() {
         new AlertDialog.Builder(this)
                 .setTitle("Cancellare la memoria?")
-                .setMessage("La cronologia locale di NOVA verrà eliminata dal telefono.")
+                .setMessage("La cronologia della conversazione e tutte le note locali di NOVA verranno eliminate dal telefono.")
                 .setNegativeButton("ANNULLA", null)
                 .setPositiveButton("CANCELLA", (dialog, which) -> {
                     memory.clearMemory();
+                    new com.novatwo.assistant.actions.LocalNoteStore(this).clear();
                     chatHistory.removeAllViews();
                     TextView empty = label("Memoria cancellata. Ricominciamo da qui.", 14,
                             Color.rgb(220, 226, 232), false);
