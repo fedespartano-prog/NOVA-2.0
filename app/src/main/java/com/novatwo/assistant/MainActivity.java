@@ -313,8 +313,9 @@ public class MainActivity extends FragmentActivity {
                 recognizer.cancel();
                 setControlsEnabled(true);
                 status.setText("ASCOLTO CONTINUO DISATTIVATO");
-            } else {
-                status.setText("ASCOLTO CONTINUO ATTIVO · PREMI PARLA PER INIZIARE");
+            } else if (continuousVoiceMode) {
+                status.setText("ASCOLTO CONTINUO ATTIVO");
+                startListening();
             }
         });
 
@@ -643,7 +644,18 @@ public class MainActivity extends FragmentActivity {
             }
             @Override public void onError(int error) {
                 setControlsEnabled(true);
-                status.setText("NON HO RICEVUTO LA VOCE · RIPROVA");
+                if (continuousVoiceMode && !requestInProgress
+                        && (error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                        || error == SpeechRecognizer.ERROR_NO_MATCH)) {
+                    status.setText("ASCOLTO ATTIVO · PUOI PARLARE");
+                    if (mainRoot != null) {
+                        mainRoot.postDelayed(() -> {
+                            if (continuousVoiceMode && !requestInProgress) startListening();
+                        }, 700);
+                    }
+                } else {
+                    status.setText("NON HO RICEVUTO LA VOCE · RIPROVA");
+                }
             }
             @Override public void onResults(Bundle results) {
                 ArrayList<String> matches = results.getStringArrayList(
