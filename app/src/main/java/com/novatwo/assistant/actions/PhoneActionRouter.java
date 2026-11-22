@@ -175,12 +175,32 @@ public final class PhoneActionRouter {
     }
 
     private static void openWeather(Activity activity, String request, ResultCallback callback) {
+        if (activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED
+                && activity.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            activity.requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION}, LOCATION_PERMISSION_REQUEST);
+            callback.onResult("Concedi a NOVA il permesso di posizione e poi ripeti la richiesta meteo.");
+            return;
+        }
         try {
-            String query = URLEncoder.encode(request + " meteo", StandardCharsets.UTF_8.name());
-            activity.startActivity(new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("https://www.google.com/search?q=" + query)));
-            callback.onResult("Ho aperto le previsioni meteo sul web. Per il meteo automatico basato sulla tua posizione aggiungeremo un servizio meteo dedicato.");
-        } catch (Exception e) { callback.onResult("Non riesco ad aprire il meteo."); }
+            LocationManager manager = (LocationManager) activity.getSystemService(Activity.LOCATION_SERVICE);
+            Location best = null;
+            for (String provider : manager.getProviders(true)) {
+                try {
+                    Location candidate = manager.getLastKnownLocation(provider);
+                    if (candidate != null && (best == null || candidate.getTime() > best.getTime())) best = candidate;
+                } catch (SecurityException ignored) { }
+            }
+            if (best == null) {
+                callback.onResult("Non ho una posizione recente. Attiva il GPS, attendi qualche secondo e ripeti la richiesta.");
+                return;
+            }
+            WeatherService.current(best.getLatitude(), best.getLongitude(), callback::onResult);
+        } catch (Exception e) {
+            callback.onResult("Non riesco a leggere la posizione per il meteo.");
+        }
     }
 
     private static void shareTextToWhatsApp(Activity activity, String text, ResultCallback callback) {
