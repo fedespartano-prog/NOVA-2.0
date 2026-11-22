@@ -1,4 +1,3 @@
-
 package com.novatwo.assistant.ai.providers;
 
 import android.os.Handler;
@@ -19,13 +18,13 @@ import java.nio.charset.StandardCharsets;
 
 public class GeminiProvider implements AIProvider {
 
+    // Gemini 2.5 Flash è disponibile nel livello gratuito dell'API
+    // (con limiti e disponibilità che dipendono da progetto e regione).
     private static final String API_URL =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
     private final String apiKey;
-
-    private final Handler mainHandler =
-        new Handler(Looper.getMainLooper());
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     public GeminiProvider(String apiKey) {
         this.apiKey = apiKey;
@@ -37,15 +36,11 @@ public class GeminiProvider implements AIProvider {
     }
 
     @Override
-    public void generateResponse(
-            String prompt,
-            ResponseCallback callback) {
-
+    public void generateResponse(String prompt, ResponseCallback callback) {
         if (apiKey == null || apiKey.trim().isEmpty()) {
             callback.onError("Chiave API Gemini mancante.");
             return;
         }
-
         if (prompt == null || prompt.trim().isEmpty()) {
             callback.onError("Messaggio vuoto.");
             return;
@@ -53,123 +48,96 @@ public class GeminiProvider implements AIProvider {
 
         new Thread(() -> {
             HttpURLConnection connection = null;
-
             try {
                 URL url = new URL(API_URL);
-
-                connection = (HttpURLConnection)
-                    url.openConnection();
-
+                connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("POST");
                 connection.setConnectTimeout(15000);
-                connection.setReadTimeout(30000);
+                connection.setReadTimeout(45000);
                 connection.setDoOutput(true);
+                connection.setRequestProperty("x-goog-api-key", apiKey.trim());
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
 
-                connection.setRequestProperty(
-                    "x-goog-api-key", apiKey.trim()
-                );
-
-                connection.setRequestProperty(
-                    "Content-Type", "application/json"
-                );
-
-                JSONObject textPart = new JSONObject();
-                textPart.put("text", prompt);
-
-                JSONArray parts = new JSONArray();
-                parts.put(textPart);
-
+                JSONObject part = new JSONObject();
+                part.put("text", prompt);
+                JSONArray parts = new JSONArray().put(part);
                 JSONObject content = new JSONObject();
                 content.put("parts", parts);
-
-                JSONArray contents = new JSONArray();
-                contents.put(content);
-
+                JSONArray contents = new JSONArray().put(content);
                 JSONObject request = new JSONObject();
                 request.put("contents", contents);
+                request.put("generationConfig", new JSONObject().put("maxOutputTokens", 2048));
 
-                byte[] data = request.toString()
-                    .getBytes(StandardCharsets.UTF_8);
-
-                try (OutputStream output =
-                         connection.getOutputStream()) {
+                byte[] data = request.toString().getBytes(StandardCharsets.UTF_8);
+                try (OutputStream output = connection.getOutputStream()) {
                     output.write(data);
                 }
 
                 int status = connection.getResponseCode();
-
-                InputStream stream =
-                    status >= 200 && status < 300
-                    ? connection.getInputStream()
-                    : connection.getErrorStream();
-
-                if (stream == null) {
-                    throw new Exception(
-                        "Risposta vuota dal server Gemini."
-                    );
-                }
-
-                StringBuilder response =
-                    new StringBuilder();
-
-                try (BufferedReader reader =
-                    new BufferedReader(
-                        new InputStreamReader(
-                            stream,
-                            StandardCharsets.UTF_8))) {
-
-                    String line;
-
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
+                InputStream stream = status >= 200 && status < 300
+                        ? connection.getInputStream() : connection.getErrorStream();
+                StringBuilder response = new StringBuilder();
+                if (stream != null) {
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) response.append(line);
                     }
                 }
 
-                if (status >= 200 && status < 300) {
-
-                    JSONObject result =
-                        new JSONObject(response.toString());
-
-                    String answer = result
-                        .getJSONArray("candidates")
-                        .getJSONObject(0)
-                        .getJSONObject("content")
-                        .getJSONArray("parts")
-                        .getJSONObject(0)
-                        .getString("text");
-
-                    mainHandler.post(
-                        () -> callback.onSuccess(answer)
-                    );
-
-                } else {
-
+                if (status < 200 || status >= 300) {
                     String error = response.toString();
-
-                    mainHandler.post(
-                        () -> callback.onError(
-                            "Errore Gemini HTTP "
-                            + status + ": " + error
-                        )
-                    );
+                    mainHandler.post(() -> callback.onError(
+                            "Errore Gemini HTTP " + status + ": " + error));
+                    return;
                 }
+
+                JSONObject result = new JSONObject(response.toString());
+                JSONArray candidates = result.optJSONArray("candidates");
+                if (candidates == null || candidates.length() == 0) {
+                    JSONObject feedback = result.optJSONObject("promptFeedback");
+                    String reason = feedback == null ? "" : feedback.optString("blockReason", "");
+                    String detail = reason.isEmpty()
+                            ? "Google non ha restituito una risposta. Dettaglio: " + response
+                            : "Richiesta bloccata da Gemini: " + reason;
+                    mainHandler.post(() -> callback.onError(detail));
+                    return;
+                }
+
+                JSONObject candidate = candidates.optJSONObject(0);
+                JSONObject candidateContent = candidate == null
+                        ? null : candidate.optJSONObject("content");
+                JSONArray answerParts = candidateContent == null
+                        ? null : candidateContent.optJSONArray("parts");
+                StringBuilder answer = new StringBuilder();
+                if (answerParts != null) {
+                    for (int i = 0; i < answerParts.length(); i++) {
+                        JSONObject answerPart = answerParts.optJSONObject(i);
+                        if (answerPart != null) {
+                            String piece = answerPart.optString("text", "");
+                            if (!piece.isEmpty()) {
+                                if (answer.length() > 0) answer.append("\n");
+                                answer.append(piece);
+                            }
+                        }
+                    }
+                }
+                if (answer.length() == 0) {
+                    String finishReason = candidate == null ? "" : candidate.optString("finishReason", "");
+                    String detail = "Gemini ha restituito una risposta senza testo"
+                            + (finishReason.isEmpty() ? "." : " (motivo: " + finishReason + ").");
+                    mainHandler.post(() -> callback.onError(detail));
+                    return;
+                }
+                String finalAnswer = answer.toString();
+                mainHandler.post(() -> callback.onSuccess(finalAnswer));
 
             } catch (Exception e) {
-
-                String error = e.getMessage();
-
-                mainHandler.post(
-                    () -> callback.onError(
-                        "Errore Gemini: " + error
-                    )
-                );
-
+                String error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                mainHandler.post(() -> callback.onError("Errore Gemini: " + error));
             } finally {
-                if (connection != null) {
-                    connection.disconnect();
-                }
+                if (connection != null) connection.disconnect();
             }
-
         }).start();
     }
 }
