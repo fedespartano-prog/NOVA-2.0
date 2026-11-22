@@ -2,6 +2,9 @@ package com.novatwo.assistant;
 
 import android.Manifest;
 import android.app.Activity;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
+import androidx.core.content.ContextCompat;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
@@ -77,6 +80,7 @@ public class MainActivity extends Activity {
     private boolean requestInProgress;
     private LinearLayout mainRoot;
     private static final int MEDIA_PICK_REQUEST = 7110;
+    private boolean biometricUnlocked = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,6 +98,7 @@ public class MainActivity extends Activity {
         initializeTextToSpeech();
         initializeSpeech();
         applyAppearance();
+        authenticateApp();
     }
 
     private void createInterface() {
@@ -277,6 +282,17 @@ public class MainActivity extends Activity {
         styleButton(appearanceButton, false);
         settingsPanel.addView(appearanceButton, fullButtonParams());
         appearanceButton.setOnClickListener(v -> chooseAppearance());
+
+
+        Button personalityButton = new Button(this);
+        personalityButton.setText("PERSONALITÀ E MODALITÀ INTIMITÀ");
+        styleButton(personalityButton, false);
+        settingsPanel.addView(personalityButton, fullButtonParams());
+        personalityButton.setOnClickListener(v -> choosePersonality());
+
+        TextView voiceSecurityInfo = label("VERIFICA VOCALE: il riconoscimento affidabile della tua identità tramite impronta vocale non è ancora integrato. NOVA non deve fingere di distinguere le persone. Le risposte vocali restano disattivate finché non sarà aggiunto un vero sistema di verifica del parlante.", 10, MUTED, false);
+        voiceSecurityInfo.setPadding(0, dp(8), 0, dp(4));
+        settingsPanel.addView(voiceSecurityInfo, matchWidth());
 
         Button mediaButton = new Button(this);
         mediaButton.setText("FOTO E VIDEO DAL TELEFONO");
@@ -630,7 +646,7 @@ public class MainActivity extends Activity {
         memory.saveMessage("user", message);
         AIProvider active = aiManager.getProvider();
         status.setText("NOVA STA PENSANDO · " + active.getProviderName().toUpperCase(Locale.ROOT));
-        aiManager.sendMessage(message, new AIProvider.ResponseCallback() {
+        aiManager.sendMessage(applyPersonality(message), new AIProvider.ResponseCallback() {
             @Override public void onSuccess(String response) {
                 runOnUiThread(() -> {
                     requestInProgress = false;
@@ -650,6 +666,59 @@ public class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+
+    private void choosePersonality() {
+        final String[] modes = {"Assistente quotidiana", "Intimità · dolce e sensuale"};
+        new AlertDialog.Builder(this).setTitle("Personalità di NOVA")
+                .setSingleChoiceItems(modes,
+                        getSharedPreferences("nova_personality", MODE_PRIVATE)
+                                .getBoolean("intimacy", false) ? 1 : 0,
+                        (dialog, which) -> {
+                            getSharedPreferences("nova_personality", MODE_PRIVATE).edit()
+                                    .putBoolean("intimacy", which == 1).apply();
+                            Toast.makeText(this, which == 1 ? "Modalità Intimità attivata"
+                                    : "Modalità quotidiana attivata", Toast.LENGTH_SHORT).show();
+                            dialog.dismiss();
+                        }).setNegativeButton("CHIUDI", null).show();
+    }
+
+    private String applyPersonality(String message) {
+        boolean intimacy = getSharedPreferences("nova_personality", MODE_PRIVATE)
+                .getBoolean("intimacy", false);
+        if (!intimacy) return "Rispondi in italiano con personalità calda, gentile, naturale e rispettosa. " + message;
+        return "PERSONALITÀ NOVA - MODALITÀ INTIMITÀ: parla in italiano con tono dolce, affettuoso, romantico, complice e sensuale. Puoi flirtare e affrontare conversazioni adulte consensuali senza giudicare. Mantieni chiari i confini tra simulazione e realtà: sei un'assistente virtuale e non provi sensazioni fisiche. Non dichiarare di avere un corpo o esperienze fisiche reali. " + message;
+    }
+
+    private void authenticateApp() {
+        int authenticators = BiometricManager.Authenticators.BIOMETRIC_WEAK
+                | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+        BiometricManager manager = BiometricManager.from(this);
+        if (manager.canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
+            new AlertDialog.Builder(this).setTitle("Protezione biometrica non disponibile")
+                    .setMessage("Configura impronta digitale o blocco schermo nelle impostazioni Android per proteggere NOVA.")
+                    .setCancelable(false).setPositiveButton("CHIUDI APP", (d, w) -> finish()).show();
+            return;
+        }
+        BiometricPrompt prompt = new BiometricPrompt(this, ContextCompat.getMainExecutor(this),
+                new BiometricPrompt.AuthenticationCallback() {
+                    @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                        biometricUnlocked = true;
+                        status.setText("ACCESSO PROTETTO · BENVENUTO");
+                    }
+                    @Override public void onAuthenticationError(int errorCode, CharSequence errString) {
+                        biometricUnlocked = false;
+                        Toast.makeText(MainActivity.this, "Accesso non autorizzato", Toast.LENGTH_SHORT).show();
+                        finish();
+                    }
+                    @Override public void onAuthenticationFailed() { biometricUnlocked = false; }
+                });
+        BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Sblocca NOVA 2.0")
+                .setSubtitle("Usa impronta digitale o credenziale del dispositivo")
+                .setAllowedAuthenticators(authenticators).build();
+        prompt.authenticate(info);
     }
 
     private void chooseAppearance() {
