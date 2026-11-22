@@ -75,6 +75,7 @@ public class MainActivity extends FragmentActivity {
     private EditText deepSeekInput;
     private EditText openAIInput;
     private EditText geminiInput;
+    private EditText groqInput;
     private Spinner providerSpinner;
     private Button listenButton;
     private Button sendButton;
@@ -222,7 +223,7 @@ public class MainActivity extends FragmentActivity {
         composer.addView(actions, matchWidth());
         root.addView(composer, matchWidth());
 
-        TextView providerLine = label("AI  ·  AUTO usa Gemini gratuito; DeepSeek/OpenAI possono richiedere credito", 10, MUTED, false);
+        TextView providerLine = label("AI · AUTO usa Groq (piano gratuito, con limiti)", 10, MUTED, false);
         providerLine.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams providerParams = wrap();
         providerParams.topMargin = dp(13);
@@ -248,8 +249,8 @@ public class MainActivity extends FragmentActivity {
         settingsPanel.addView(providerStatus, matchWidth());
 
         providerSpinner = new Spinner(this);
-        String[] providers = {"AUTO · Gemini (quota gratuita)",
-                "DEEPSEEK", "OPENAI", "GEMINI"};
+        String[] providers = {"AUTO · Groq (piano gratuito)",
+                "GROQ", "DEEPSEEK", "OPENAI", "GEMINI"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, providers);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -263,9 +264,11 @@ public class MainActivity extends FragmentActivity {
         deepSeekInput = createKeyInput("Nuova chiave API DeepSeek");
         openAIInput = createKeyInput("Nuova chiave API OpenAI");
         geminiInput = createKeyInput("Nuova chiave API Gemini");
+        groqInput = createKeyInput("Nuova chiave API Groq (gsk_...)");
         settingsPanel.addView(deepSeekInput, matchWidth());
         settingsPanel.addView(openAIInput, matchWidth());
         settingsPanel.addView(geminiInput, matchWidth());
+        settingsPanel.addView(groqInput, matchWidth());
 
         TextView keyHint = label("Inserisci solo le chiavi nuove. I campi vuoti mantengono quelle già salvate.", 10,
                 MUTED, false);
@@ -455,8 +458,10 @@ public class MainActivity extends FragmentActivity {
         boolean deep = hasKey("DEEPSEEK");
         boolean open = hasKey("OPENAI");
         boolean gemini = hasKey("GEMINI");
-        keyStatus.setText("Chiavi presenti: DeepSeek " + yesNo(deep)
-                + "  ·  OpenAI " + yesNo(open) + "  ·  Gemini " + yesNo(gemini));
+        boolean groq = hasKey("GROQ");
+        keyStatus.setText("Chiavi presenti: Groq " + yesNo(groq)
+                + " · DeepSeek " + yesNo(deep) + " · OpenAI " + yesNo(open)
+                + " · Gemini " + yesNo(gemini));
     }
 
     private String yesNo(boolean value) {
@@ -471,17 +476,19 @@ public class MainActivity extends FragmentActivity {
     private void setSpinnerProvider(String provider) {
         String wanted = provider == null ? "AUTO" : provider.toUpperCase(Locale.ROOT);
         int position = 0;
-        if ("DEEPSEEK".equals(wanted)) position = 1;
-        if ("OPENAI".equals(wanted)) position = 2;
-        if ("GEMINI".equals(wanted)) position = 3;
+        if ("GROQ".equals(wanted)) position = 1;
+        if ("DEEPSEEK".equals(wanted)) position = 2;
+        if ("OPENAI".equals(wanted)) position = 3;
+        if ("GEMINI".equals(wanted)) position = 4;
         providerSpinner.setSelection(position);
     }
 
     private String selectedProvider() {
         int position = providerSpinner.getSelectedItemPosition();
-        if (position == 1) return "DEEPSEEK";
-        if (position == 2) return "OPENAI";
-        if (position == 3) return "GEMINI";
+        if (position == 1) return "GROQ";
+        if (position == 2) return "DEEPSEEK";
+        if (position == 3) return "OPENAI";
+        if (position == 4) return "GEMINI";
         return "AUTO";
     }
 
@@ -490,10 +497,12 @@ public class MainActivity extends FragmentActivity {
             saveIfProvided("DEEPSEEK", deepSeekInput);
             saveIfProvided("OPENAI", openAIInput);
             saveIfProvided("GEMINI", geminiInput);
+            saveIfProvided("GROQ", groqInput);
             keyStore.setSelectedProvider(selectedProvider());
             deepSeekInput.setText("");
             openAIInput.setText("");
             geminiInput.setText("");
+            groqInput.setText("");
             rebuildAIManager();
             updateKeyStatus();
             Toast.makeText(this, "Configurazione salvata sul dispositivo.", Toast.LENGTH_LONG).show();
@@ -513,7 +522,8 @@ public class MainActivity extends FragmentActivity {
                 keyStore.getSelectedProvider(),
                 keyStore.getKey("OPENAI"),
                 keyStore.getKey("DEEPSEEK"),
-                keyStore.getKey("GEMINI"));
+                keyStore.getKey("GEMINI"),
+                keyStore.getKey("GROQ"));
         AIProvider provider = aiManager.getProvider();
         String selected = keyStore.getSelectedProvider();
         if (provider == null) {
@@ -535,6 +545,7 @@ public class MainActivity extends FragmentActivity {
                     keyStore.deleteKey("DEEPSEEK");
                     keyStore.deleteKey("OPENAI");
                     keyStore.deleteKey("GEMINI");
+                    keyStore.deleteKey("GROQ");
                     keyStore.setSelectedProvider("AUTO");
                     try {
                         setSpinnerProvider("AUTO");
@@ -735,7 +746,7 @@ public class MainActivity extends FragmentActivity {
         AIProvider active = aiManager.getProvider();
         new AlertDialog.Builder(this)
                 .setTitle("Confermi l'invio a " + active.getProviderName() + "?")
-                .setMessage("La richiesta e gli ultimi messaggi della conversazione verranno inviati al provider AI scelto. ATTENZIONE: DeepSeek API e OpenAI API possono richiedere credito o fatturazione separata, anche se le rispettive app ufficiali sono gratuite. AUTO usa solo Gemini API (modello con livello gratuito), nei limiti previsti da Google. Nessuna richiesta partirà senza questa conferma.")
+                .setMessage("La richiesta e gli ultimi messaggi verranno inviati al provider AI scelto. Groq può essere usato nel piano Free entro i limiti; non passare al piano Developer e non aggiungere metodi di pagamento. Se il piano Free non consente la richiesta, NOVA mostrerà l'errore senza provare altri provider. DeepSeek e OpenAI possono richiedere credito separato. Nessuna richiesta partirà senza conferma.")
                 .setNegativeButton("ANNULLA", (dialog, which) -> {
                     status.setText("INVIO ANNULLATO");
                     setControlsEnabled(true);
