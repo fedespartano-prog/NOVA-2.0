@@ -1,10 +1,11 @@
-
 package com.novatwo.assistant.ai;
+
+import com.novatwo.assistant.ai.providers.DeepSeekProvider;
+import com.novatwo.assistant.ai.providers.GeminiProvider;
+import com.novatwo.assistant.ai.providers.OpenAIProvider;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import com.novatwo.assistant.ai.providers.GeminiProvider;
 
 public final class AIProviderFactory {
 
@@ -19,29 +20,22 @@ public final class AIProviderFactory {
 
         List<AIProvider> availableProviders = new ArrayList<>();
 
-        /*
-         * MODALITÀ GRATUITA SICURA:
-         *
-         * Per ora viene attivato esclusivamente Gemini API.
-         * OpenAI e DeepSeek API non vengono inizializzati
-         * e quindi non possono ricevere richieste.
-         *
-         * Non inserire mai le chiavi API nel repository GitHub.
-         */
+        // AUTO usa il primo provider configurato, nell'ordine DeepSeek,
+        // OpenAI, Gemini. Non invia la stessa richiesta a più servizi.
+        if (deepSeekKey != null && !deepSeekKey.trim().isEmpty()) {
+            availableProviders.add(new DeepSeekProvider(deepSeekKey.trim()));
+        }
+
+        if (openAIKey != null && !openAIKey.trim().isEmpty()) {
+            availableProviders.add(new OpenAIProvider(openAIKey.trim()));
+        }
 
         if (geminiKey != null && !geminiKey.trim().isEmpty()) {
-            availableProviders.add(
-                    new GeminiProvider(geminiKey.trim())
-            );
+            availableProviders.add(new GeminiProvider(geminiKey.trim()));
         }
 
         AIManager manager = new AIManager();
-
-        manager.setProviders(
-                availableProviders,
-                preferredProvider
-        );
-
+        manager.setProviders(availableProviders, preferredProvider);
         return manager;
     }
 }
