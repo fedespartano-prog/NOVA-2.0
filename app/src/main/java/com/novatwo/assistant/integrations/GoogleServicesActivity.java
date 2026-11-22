@@ -5,6 +5,8 @@ import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.net.Uri;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.widget.Button;
@@ -39,6 +41,7 @@ public class GoogleServicesActivity extends Activity {
     private String pendingService = "";
     private EditText emailTo, emailSubject, emailBody;
     private static final int REQUEST_SHARE_DRIVE = 8203;
+    private Uri pendingDriveUpload;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -73,6 +76,7 @@ public class GoogleServicesActivity extends Activity {
             Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             pick.setType("*/*");
             pick.addCategory(Intent.CATEGORY_OPENABLE);
+            pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivityForResult(pick, REQUEST_SHARE_DRIVE);
         });
         addAction(root,"COLLEGA E LEGGI CALENDARIO", "CALENDAR", Arrays.asList(new Scope("https://www.googleapis.com/auth/calendar.readonly")));
@@ -148,6 +152,7 @@ public class GoogleServicesActivity extends Activity {
             return;
         }
         if ("GMAIL_SEND".equals(pendingService)) sendGmail(token);
+        else if ("DRIVE_UPLOAD".equals(pendingService)) uploadDriveFile(token);
         else fetchService(pendingService, token);
     }
 
@@ -158,15 +163,18 @@ public class GoogleServicesActivity extends Activity {
                 status.setText("Selezione file annullata.");
                 return;
             }
-            Uri selected = data.getData();
-            String mime = getContentResolver().getType(selected);
-            if (mime == null) mime = "*/*";
-            Intent share = new Intent(Intent.ACTION_SEND);
-            share.setType(mime);
-            share.putExtra(Intent.EXTRA_STREAM, selected);
-            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            status.setText("Scegli Google Drive nel menu di condivisione per caricare il file.");
-            startActivity(Intent.createChooser(share, "Carica file su Google Drive"));
+            pendingDriveUpload = data.getData();
+            status.setText("File selezionato. Richiedo il consenso per caricarlo su Google Drive.");
+            new AlertDialog.Builder(this)
+                    .setTitle("Caricare il file su Google Drive?")
+                    .setMessage("NOVA invierà il file selezionato al tuo Google Drive. Il trasferimento partirà solo dopo il consenso Google e questa conferma.")
+                    .setNegativeButton("ANNULLA", (dialog, which) -> {
+                        pendingDriveUpload = null;
+                        status.setText("Caricamento annullato.");
+                    })
+                    .setPositiveButton("CONTINUA", (dialog, which) -> authorize(
+                            "DRIVE_UPLOAD", Arrays.asList(new Scope("https://www.googleapis.com/auth/drive.file"))))
+                    .show();
             return;
         }
         if (requestCode != REQUEST_AUTH) return;
@@ -353,6 +361,76 @@ public class GoogleServicesActivity extends Activity {
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    private void uploadDriveFile(String token) {
+        final Uri uri = pendingDriveUpload;
+        if (uri == null) {
+            status.setText("Nessun file selezionato per il caricamento.");
+            return;
+        }
+        pendingDriveUpload = null;
+        status.setText("Caricamento del file su Google Drive...");
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                String fileName = "NOVA_upload";
+                try (Cursor cursor = getContentResolver().query(uri,
+                        new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                        if (index >= 0) fileName = cursor.getString(index);
+                    }
+                }
+                String mime = getContentResolver().getType(uri);
+                if (mime == null) mime = "application/octet-stream";
+                String boundary = "NOVA_" + java.util.UUID.randomUUID().toString().replace("-", "");
+                URL endpoint = new URL("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType");
+                connection = (HttpURLConnection) endpoint.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(20000);
+                connection.setReadTimeout(120000);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Authorization", "Bearer " + token);
+                connection.setRequestProperty("Content-Type", "multipart/related; boundary=" + boundary);
+                try (java.io.OutputStream out = connection.getOutputStream()) {
+                    String metadata = new JSONObject().put("name", fileName).toString();
+                    out.write(("--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
+                            + metadata + "\r\n").getBytes(StandardCharsets.UTF_8));
+                    out.write(("--" + boundary + "\r\nContent-Type: " + mime + "\r\n\r\n")
+                            .getBytes(StandardCharsets.UTF_8));
+                    try (InputStream input = getContentResolver().openInputStream(uri)) {
+                        if (input == null) throw new Exception("Impossibile leggere il file selezionato.");
+                        byte[] buffer = new byte[8192];
+                        int count;
+                        while ((count = input.read(buffer)) != -1) out.write(buffer, 0, count);
+                    }
+                    out.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+                }
+                int code = connection.getResponseCode();
+                InputStream responseStream = code >= 200 && code < 300
+                        ? connection.getInputStream() : connection.getErrorStream();
+                StringBuilder response = new StringBuilder();
+                if (responseStream != null) {
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(responseStream, StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) response.append(line);
+                    }
+                }
+                if (code < 200 || code >= 300) {
+                    throw new Exception("Google Drive HTTP " + code + ": " + response);
+                }
+                JSONObject uploaded = new JSONObject(response.toString());
+                String result = "File caricato su Google Drive: " + uploaded.optString("name", fileName);
+                runOnUiThread(() -> status.setText(result));
+            } catch (Exception e) {
+                String message = "Caricamento Drive non riuscito: " + safe(e.getMessage());
+                runOnUiThread(() -> status.setText(message));
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
     }
 
     private String safe(String value) {
