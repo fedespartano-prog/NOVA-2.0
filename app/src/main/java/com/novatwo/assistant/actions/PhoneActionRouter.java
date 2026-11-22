@@ -201,8 +201,13 @@ public final class PhoneActionRouter {
         }
 
         if (lower.startsWith("cerca nelle email ") || lower.startsWith("cerca email ")) {
-            launchApp(activity, "com.google.android.gm", "Gmail", callback);
-            callback.onResult("Ho aperto Gmail. Per cercare e leggere direttamente le email da NOVA serve collegare l'account tramite l'autorizzazione ufficiale Google; non userò né copierò la tua password.");
+            Intent gmail = activity.getPackageManager().getLaunchIntentForPackage("com.google.android.gm");
+            if (gmail != null) {
+                activity.startActivity(gmail);
+                callback.onResult("Ho aperto Gmail. Per cercare e leggere direttamente le email da NOVA servirà il collegamento ufficiale Google con il tuo consenso; non userò né copierò la tua password.");
+            } else {
+                callback.onResult("Gmail non risulta installato. Puoi aprire la posta dal browser o installare l'app ufficiale.");
+            }
             return true;
         }
 
