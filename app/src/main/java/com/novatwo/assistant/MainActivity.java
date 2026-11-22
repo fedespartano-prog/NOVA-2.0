@@ -308,7 +308,7 @@ public class MainActivity extends FragmentActivity {
                 .show());
 
         Button mediaButton = new Button(this);
-        mediaButton.setText("FOTO E VIDEO DAL TELEFONO");
+        mediaButton.setText("STUDIO CREAZIONE IMMAGINI AI");
         styleButton(mediaButton, false);
         settingsPanel.addView(mediaButton, fullButtonParams());
         mediaButton.setOnClickListener(v -> startActivity(new Intent(this, com.novatwo.assistant.media.MediaStudioActivity.class)));
