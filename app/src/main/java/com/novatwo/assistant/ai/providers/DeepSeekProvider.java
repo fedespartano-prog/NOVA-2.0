@@ -22,7 +22,7 @@ public class DeepSeekProvider implements AIProvider {
     private static final String API_URL =
             "https://api.deepseek.com/chat/completions";
 
-    private static final String MODEL = "deepseek-chat";
+    private static final String MODEL = "deepseek-flash";
 
     private final String apiKey;
 
