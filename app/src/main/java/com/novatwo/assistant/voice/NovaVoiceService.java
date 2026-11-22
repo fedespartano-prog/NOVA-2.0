@@ -116,14 +116,12 @@ public class NovaVoiceService extends Service {
                 if (configs != null) {
                     for (AudioRecordingConfiguration config : configs) {
                         if (config == null) continue;
-                        String packageName = config.getClientPackageName();
-                        if (packageName == null || packageName.equals(getPackageName())) continue;
-                        if (packageName.equals("com.google.android.googlequicksearchbox")
-                                || packageName.equals("com.google.android.tts")
-                                || packageName.equals("com.google.android.as")
-                                || packageName.equals("com.android.speech")) continue;
-                        externalRecorder = true;
-                        break;
+                        // Android 10+ segnala quando il client di registrazione viene silenziato
+                        // perché un'altra app ha ottenuto la priorità del microfono.
+                        if (config.isClientSilenced()) {
+                            externalRecorder = true;
+                            break;
+                        }
                     }
                 }
                 if (externalRecorder) pauseForExternalRecording();
