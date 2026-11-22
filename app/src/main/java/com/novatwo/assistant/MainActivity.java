@@ -95,6 +95,7 @@ public class MainActivity extends FragmentActivity {
     private BroadcastReceiver voiceReceiver;
     private boolean voiceReceiverRegistered = false;
     private LinearLayout mainRoot;
+    private OrbView orbView;
     private static final int MEDIA_PICK_REQUEST = 7110;
     private boolean biometricUnlocked = false;
     private final java.util.Set<String> sessionApprovedProviders = new java.util.HashSet<>();
@@ -166,12 +167,12 @@ public class MainActivity extends FragmentActivity {
         headline.setGravity(Gravity.CENTER);
         root.addView(headline, wrap());
 
-        OrbView orb = new OrbView(this);
-        LinearLayout.LayoutParams orbParams = new LinearLayout.LayoutParams(dp(224), dp(224));
+        orbView = new OrbView(this);
+        LinearLayout.LayoutParams orbParams = new LinearLayout.LayoutParams(dp(248), dp(248));
         orbParams.gravity = Gravity.CENTER;
-        orbParams.topMargin = dp(5);
-        orbParams.bottomMargin = dp(2);
-        root.addView(orb, orbParams);
+        orbParams.topMargin = dp(1);
+        orbParams.bottomMargin = dp(1);
+        root.addView(orbView, orbParams);
 
         status = label("PRONTA QUANDO VUOI", 10, GREEN, true);
         status.setGravity(Gravity.CENTER);
@@ -728,20 +729,18 @@ public class MainActivity extends FragmentActivity {
                 }
                 textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String utteranceId) {
-                        runOnUiThread(() -> {
-                            if (continuousVoiceMode && !requestInProgress) resumeVoiceSession();
-                        });
+                        runOnUiThread(() -> { if (orbView != null) orbView.setMode(OrbView.SPEAKING); });
                     }
                     @Override public void onDone(String utteranceId) {
                         runOnUiThread(() -> {
+                            if (orbView != null) orbView.setMode(continuousVoiceMode ? OrbView.LISTENING : OrbView.IDLE);
                             if (continuousVoiceMode && !requestInProgress) resumeVoiceSession();
                         });
                     }
                     @Override public void onError(String utteranceId) {
                         runOnUiThread(() -> {
-                            if (continuousVoiceMode && !requestInProgress && !recognitionActive) {
-                                startListening();
-                            }
+                            if (orbView != null) orbView.setMode(OrbView.IDLE);
+                            if (continuousVoiceMode && !requestInProgress && !recognitionActive) startListening();
                         });
                     }
                 });
@@ -756,6 +755,7 @@ public class MainActivity extends FragmentActivity {
                 if (intent == null) return;
                 String action = intent.getAction();
                 if (com.novatwo.assistant.voice.NovaVoiceService.ACTION_USER_SPEECH.equals(action)) {
+                    if (orbView != null) orbView.setMode(OrbView.LISTENING);
                     if (textToSpeech != null && textToSpeech.isSpeaking()) textToSpeech.stop();
                     return;
                 }
@@ -811,6 +811,7 @@ public class MainActivity extends FragmentActivity {
         recognizer.setRecognitionListener(new RecognitionListener() {
             @Override public void onReadyForSpeech(Bundle params) {
                 recognitionActive = true;
+                if (orbView != null) orbView.setMode(OrbView.LISTENING);
                 status.setText("TI STO ASCOLTANDO");
             }
             @Override public void onBeginningOfSpeech() {
@@ -822,10 +823,12 @@ public class MainActivity extends FragmentActivity {
             @Override public void onRmsChanged(float value) { }
             @Override public void onBufferReceived(byte[] buffer) { }
             @Override public void onEndOfSpeech() {
+                if (orbView != null) orbView.setMode(OrbView.THINKING);
                 status.setText("STO PREPARANDO LA RISPOSTA");
             }
             @Override public void onError(int error) {
                 recognitionActive = false;
+                if (orbView != null) orbView.setMode(continuousVoiceMode ? OrbView.LISTENING : OrbView.IDLE);
                 setControlsEnabled(true);
                 if (continuousVoiceMode && !requestInProgress
                         && error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
@@ -845,6 +848,7 @@ public class MainActivity extends FragmentActivity {
             }
             @Override public void onResults(Bundle results) {
                 recognitionActive = false;
+                if (orbView != null) orbView.setMode(OrbView.THINKING);
                 ArrayList<String> matches = results.getStringArrayList(
                         SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
@@ -874,6 +878,7 @@ public class MainActivity extends FragmentActivity {
         try {
             androidx.core.content.ContextCompat.startForegroundService(this, intent);
             getSharedPreferences("nova_voice", MODE_PRIVATE).edit().putBoolean("session_active", true).apply();
+            if (orbView != null) orbView.setMode(OrbView.LISTENING);
             status.setText("CHIAMATA ATTIVA · NOVA TI ASCOLTA ANCHE IN BACKGROUND");
             setControlsEnabled(true);
         } catch (Exception e) {
@@ -967,6 +972,7 @@ public class MainActivity extends FragmentActivity {
         addChatLine("user", message);
         memory.saveMessage("user", message);
         status.setText("NOVA STA PENSANDO · " + active.getProviderName().toUpperCase(Locale.ROOT));
+        if (orbView != null) orbView.setMode(OrbView.THINKING);
         aiManager.sendMessage(applyPersonality(buildConversationPrompt(message)), new AIProvider.ResponseCallback() {
             @Override public void onSuccess(String response) {
                 runOnUiThread(() -> {
@@ -983,6 +989,7 @@ public class MainActivity extends FragmentActivity {
                     requestInProgress = false;
                     addChatLine("assistant", "Non sono riuscita a completare la richiesta. " + error);
                     status.setText("RICHIESTA NON RIUSCITA");
+                    if (orbView != null) orbView.setMode(OrbView.IDLE);
                     setControlsEnabled(true);
                 });
             }
@@ -1140,9 +1147,11 @@ public class MainActivity extends FragmentActivity {
     private void speak(String message) {
         String spokenText = cleanTextForSpeech(message);
         if (ttsReady && textToSpeech != null && !spokenText.trim().isEmpty()) {
+            if (orbView != null) orbView.setMode(OrbView.SPEAKING);
             textToSpeech.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, "nova_response");
-        } else if (continuousVoiceMode && !requestInProgress) {
-            resumeVoiceSession();
+        } else {
+            if (orbView != null) orbView.setMode(continuousVoiceMode ? OrbView.LISTENING : OrbView.IDLE);
+            if (continuousVoiceMode && !requestInProgress) resumeVoiceSession();
         }
     }
 
@@ -1185,92 +1194,94 @@ public class MainActivity extends FragmentActivity {
     }
 
     private final class OrbView extends View {
+        static final int IDLE = 0, LISTENING = 1, SPEAKING = 2, THINKING = 3;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private float rotation = 0f;
         private android.animation.ValueAnimator animator;
+        private float phase = 0f;
+        private int mode = IDLE;
 
         OrbView(Activity context) {
             super(context);
             setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-            animator = android.animation.ValueAnimator.ofFloat(0f, 360f);
-            animator.setDuration(24000);
+            animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
+            animator.setDuration(6200L);
             animator.setRepeatCount(android.animation.ValueAnimator.INFINITE);
-            animator.setInterpolator(new DecelerateInterpolator());
+            animator.setInterpolator(new android.view.animation.LinearInterpolator());
             animator.addUpdateListener(value -> {
-                rotation = (Float) value.getAnimatedValue();
+                phase = (Float) value.getAnimatedValue() * (float) (Math.PI * 2.0);
                 invalidate();
             });
             animator.start();
         }
 
-        @Override
-        protected void onDraw(Canvas canvas) {
-            super.onDraw(canvas);
-            float cx = getWidth() / 2f;
-            float cy = getHeight() / 2f;
-            float radius = Math.min(getWidth(), getHeight()) * 0.39f;
-
-            paint.setShader(new RadialGradient(cx, cy, radius * 1.65f,
-                    new int[]{0x6640CFFF, 0x333080C8, 0x00001020},
-                    null, Shader.TileMode.CLAMP));
-            canvas.drawCircle(cx, cy, radius * 1.55f, paint);
-            paint.setShader(null);
-
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(dp(1.2f));
-            paint.setColor(0xAA4D8DFF);
-            canvas.drawCircle(cx, cy, radius * 1.13f, paint);
-            paint.setColor(0x664D8DFF);
-            canvas.drawCircle(cx, cy, radius * 1.22f, paint);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(dp(2));
-            paint.setColor(0x6650CFFF);
-            canvas.drawOval(cx - radius * 0.78f, cy + radius * 0.88f,
-                    cx + radius * 0.78f, cy + radius * 1.10f, paint);
-            paint.setStrokeWidth(dp(1.3f));
-            paint.setColor(0x4450CFFF);
-            canvas.drawOval(cx - radius * 1.02f, cy + radius * 0.96f,
-                    cx + radius * 1.02f, cy + radius * 1.23f, paint);
-
-            paint.setStyle(Paint.Style.FILL);
-            paint.setShader(new RadialGradient(cx - radius * 0.32f, cy - radius * 0.38f,
-                    radius * 1.55f,
-                    new int[]{0xFF344C50, 0xFF17242B, 0xFF080D13},
-                    new float[]{0f, 0.48f, 1f}, Shader.TileMode.CLAMP));
-            canvas.drawCircle(cx, cy, radius, paint);
-            paint.setShader(null);
-
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(dp(1.4f));
-            paint.setColor(0xAA8DB7FF);
-            canvas.drawCircle(cx, cy, radius, paint);
-            paint.setColor(0x6650CFFF);
-            paint.setStrokeWidth(dp(5));
-            canvas.drawArc(cx - radius + dp(5), cy - radius + dp(5),
-                    cx + radius - dp(5), cy + radius - dp(5),
-                    rotation, 105, false, paint);
-
-            canvas.save();
-            canvas.rotate(rotation * 0.12f, cx, cy);
-            paint.setStyle(Paint.Style.FILL);
-            paint.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
-            paint.setTextAlign(Paint.Align.CENTER);
-            paint.setTextSize(radius * 1.18f);
-            paint.setColor(0xFF62DFFF);
-            paint.setShadowLayer(dp(18), 0, 0, 0xCC00AFFF);
-            canvas.drawText("N", cx, cy + radius * 0.39f, paint);
-            paint.clearShadowLayer();
-            canvas.restore();
-
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColor(0x66FFFFFF);
-            canvas.drawCircle(cx - radius * 0.37f, cy - radius * 0.48f, dp(5), paint);
-            canvas.drawCircle(cx - radius * 0.25f, cy - radius * 0.56f, dp(2), paint);
+        void setMode(int nextMode) {
+            if (mode != nextMode) { mode = nextMode; invalidate(); }
         }
 
-        @Override
-        protected void onDetachedFromWindow() {
-            if (animator != null) animator.cancel();
+        private float wave(float offset, float speed) {
+            return (float) Math.sin(phase * speed + offset);
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float w=getWidth(), h=getHeight();
+            if(w<=0 || h<=0)return;
+            float cx=w*0.5f, baseY=h*0.77f;
+            float bob=(float)Math.sin(phase)*dp(mode==SPEAKING?5f:3f);
+            float pulse=mode==SPEAKING?1f+0.045f*wave(0,3f):mode==LISTENING?1f+0.025f*wave(0,1.8f):mode==THINKING?1f+0.015f*wave(0,1.2f):1f+0.012f*wave(0,0.8f);
+            float radius=Math.min(w*0.31f,h*0.285f)*pulse, cy=h*0.39f+bob;
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setShader(new RadialGradient(cx,cy,radius*2f,new int[]{mode==SPEAKING?0x8840DFFF:0x6640CFFF,0x223080FF,0x00001020},null,Shader.TileMode.CLAMP));
+            canvas.drawCircle(cx,cy,radius*2f,paint); paint.setShader(null);
+
+            float energy=mode==SPEAKING?1.35f:mode==LISTENING?1.12f:1f;
+            for(int i=0;i<5;i++){
+                float travel=(phase*(0.22f+i*0.035f)+i*0.22f)%1f;
+                float rx=radius*(0.82f+travel*1.05f)*energy;
+                float ry=dp(5f+i*1.2f)*(0.78f+travel*0.35f);
+                int alpha=Math.max(18,(int)(125*(1f-travel)*(mode==SPEAKING?1.25f:1f)));
+                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(i==0?2.1f:1.15f));
+                paint.setColor((alpha<<24)|0x004DCFFF);
+                canvas.drawOval(cx-rx,baseY-ry,cx+rx,baseY+ry,paint);
+            }
+            paint.setStrokeWidth(dp(1.4f)); paint.setColor(0x6650CFFF);
+            canvas.drawOval(cx-radius*1.52f,baseY-dp(13),cx+radius*1.52f,baseY+dp(13),paint);
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setShader(new RadialGradient(cx-radius*0.34f,cy-radius*0.43f,radius*1.55f,
+                    new int[]{0xAA557F9B,0x8820344B,0xCC050D18},new float[]{0f,0.48f,1f},Shader.TileMode.CLAMP));
+            canvas.drawCircle(cx,cy,radius,paint); paint.setShader(null);
+
+            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(2f)); paint.setColor(0xCC8DEBFF);
+            canvas.drawCircle(cx,cy,radius,paint);
+            paint.setStrokeWidth(dp(5f)); paint.setColor(mode==SPEAKING?0xCC00E8FF:0x9950BFFF);
+            canvas.drawArc(cx-radius+dp(3),cy-radius+dp(3),cx+radius-dp(3),cy+radius-dp(3),phase*57.2958f,92f,false,paint);
+
+            canvas.save(); canvas.rotate((float)Math.sin(phase*0.55f)*13f+phase*8f,cx,cy);
+            paint.setStrokeWidth(dp(1.15f)); paint.setColor(0x8873DFFF);
+            canvas.drawOval(cx-radius*1.10f,cy-radius*0.35f,cx+radius*1.10f,cy+radius*0.35f,paint);
+            canvas.restore();
+
+            paint.setStrokeCap(Paint.Cap.ROUND); paint.setStrokeWidth(dp(3.2f)); paint.setColor(0xCCFFFFFF);
+            float glint=(float)Math.sin(phase*0.8f)*radius*0.12f;
+            canvas.drawArc(cx-radius*0.86f+glint,cy-radius*0.86f,cx+radius*0.86f+glint,cy+radius*0.86f,218f,48f,false,paint);
+
+            canvas.save(); canvas.rotate((float)Math.sin(phase*0.45f)*2.5f,cx,cy);
+            paint.setStyle(Paint.Style.FILL); paint.setTypeface(Typeface.create("sans-serif-light",Typeface.NORMAL));
+            paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(radius*1.27f); paint.setColor(0xFF8AF2FF);
+            paint.setShadowLayer(dp(mode==SPEAKING?23f:16f),0,0,mode==SPEAKING?0xFF00CFFF:0xCC00AFFF);
+            canvas.drawText("N",cx,cy+radius*0.40f,paint); paint.clearShadowLayer(); canvas.restore();
+
+            paint.setStyle(Paint.Style.FILL); paint.setColor(0xAAFFFFFF);
+            float sparkleX=cx-radius*(0.42f+0.05f*wave(0.8f,0.7f));
+            canvas.drawCircle(sparkleX,cy-radius*0.58f,dp(3.2f),paint);
+            paint.setColor(0x6688DFFF); canvas.drawCircle(cx+radius*0.72f,cy-radius*0.12f,dp(1.8f),paint);
+            paint.setStrokeCap(Paint.Cap.BUTT);
+        }
+
+        @Override protected void onDetachedFromWindow() {
+            if(animator!=null)animator.cancel();
             super.onDetachedFromWindow();
         }
     }
