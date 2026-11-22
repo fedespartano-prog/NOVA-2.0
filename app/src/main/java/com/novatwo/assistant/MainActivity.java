@@ -103,7 +103,7 @@ public class MainActivity extends FragmentActivity {
         keyStore = new APIKeyStore(this);
         memory = new ConversationMemory(this);
         continuousVoiceMode = getSharedPreferences("nova_voice", MODE_PRIVATE)
-                .getBoolean("continuous", false);
+                .getBoolean("continuous", true);
 
         createInterface();
         loadAIConfiguration();
