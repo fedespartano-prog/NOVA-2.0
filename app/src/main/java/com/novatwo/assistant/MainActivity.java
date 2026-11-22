@@ -1,5 +1,6 @@
 package com.novatwo.assistant;
 
+import android.app.Activity;
 import android.Manifest;
 import androidx.fragment.app.FragmentActivity;
 import androidx.biometric.BiometricManager;
