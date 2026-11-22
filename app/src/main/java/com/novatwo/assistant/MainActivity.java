@@ -326,7 +326,7 @@ public class MainActivity extends FragmentActivity {
         settingsPanel.addView(providerStatus, matchWidth());
 
         providerSpinner = new Spinner(this);
-        String[] providers = {"AUTO · Groq (piano gratuito)",
+        String[] providers = {"AUTO · DeepSeek → Groq → Gemini",
                 "GROQ", "DEEPSEEK", "OPENAI", "GEMINI", "GROK · xAI (API a pagamento)"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, providers);
@@ -958,8 +958,9 @@ public class MainActivity extends FragmentActivity {
         }
         AIProvider active = aiManager.getProvider();
         String providerConsentKey = active.getProviderName().toLowerCase(Locale.ROOT);
-        boolean paidGrok = active.getProviderName().toLowerCase(Locale.ROOT).contains("grok");
-        boolean providerAlreadyApproved = !paidGrok
+        String providerNameLower = active.getProviderName().toLowerCase(Locale.ROOT);
+        boolean requiresPerRequestConsent = !providerNameLower.equals("groq");
+        boolean providerAlreadyApproved = !requiresPerRequestConsent
                 && getSharedPreferences("nova_provider_consent", MODE_PRIVATE)
                 .getBoolean(providerConsentKey, false);
         if (providerAlreadyApproved) {
@@ -969,17 +970,17 @@ public class MainActivity extends FragmentActivity {
         new AlertDialog.Builder(this)
                 .setTitle("Confermi l'invio a " + active.getProviderName() + "?")
                 .setMessage("La richiesta e il contesto della conversazione verranno inviati a " + active.getProviderName() + ". "
-                        + (paidGrok
-                        ? "ATTENZIONE: l'API Grok/xAI è a pagamento secondo i token e il modello scelto. Questa singola richiesta può generare un addebito sul tuo account xAI. Ti chiederò conferma ogni volta."
-                        : "Confermando, NOVA ricorderà questa autorizzazione anche dopo la chiusura dell'app. Potrai revocarla dalle impostazioni.")
+                        + (requiresPerRequestConsent
+                        ? "ATTENZIONE: questo servizio API può addebitare i token o il consumo al tuo account, in base al piano e al credito disponibili. Questa singola richiesta partirà solo dopo la tua conferma. NOVA ti chiederà conferma ogni volta."
+                        : "Confermando, NOVA ricorderà l'autorizzazione Groq. Verifica di usare il piano gratuito e non attivare crediti o pagamenti.")
                         + " NOVA non passa automaticamente ad altri provider.")
                 .setNegativeButton("ANNULLA", (dialog, which) -> {
                     status.setText("INVIO ANNULLATO");
                     setControlsEnabled(true);
                     if (continuousVoiceMode) mainRoot.postDelayed(() -> startListening(), 500);
                 })
-                .setPositiveButton(paidGrok ? "AUTORIZZA SOLO QUESTA VOLTA" : "AUTORIZZA SEMPRE E INVIA", (dialog, which) -> {
-                    if (!paidGrok) {
+                .setPositiveButton(requiresPerRequestConsent ? "AUTORIZZA SOLO QUESTA VOLTA" : "AUTORIZZA SEMPRE E INVIA", (dialog, which) -> {
+                    if (!requiresPerRequestConsent) {
                         getSharedPreferences("nova_provider_consent", MODE_PRIVATE).edit()
                                 .putBoolean(providerConsentKey, true).apply();
                         sessionApprovedProviders.add(providerConsentKey);
