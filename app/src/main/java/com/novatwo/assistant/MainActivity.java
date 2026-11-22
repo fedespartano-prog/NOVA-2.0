@@ -84,6 +84,8 @@ public class MainActivity extends FragmentActivity {
     private EditText openAIInput;
     private EditText geminiInput;
     private EditText groqInput;
+    private EditText grokInput;
+    private Button callToggleButton;
     private Spinner providerSpinner;
     private Button listenButton;
     private Button sendButton;
@@ -110,7 +112,7 @@ public class MainActivity extends FragmentActivity {
         keyStore = new APIKeyStore(this);
         memory = new ConversationMemory(this);
         continuousVoiceMode = getSharedPreferences("nova_voice", MODE_PRIVATE)
-                .getBoolean("continuous", true);
+                .getBoolean("continuous", false);
 
         createInterface();
         loadAIConfiguration();
@@ -182,18 +184,28 @@ public class MainActivity extends FragmentActivity {
         statusParams.bottomMargin = dp(8);
         root.addView(status, statusParams);
 
-        Button endCallButton = new Button(this);
-        endCallButton.setText("CHIUDI CHIAMATA");
-        styleButton(endCallButton, false);
-        LinearLayout.LayoutParams endCallParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42));
-        endCallParams.bottomMargin = dp(14);
-        root.addView(endCallButton, endCallParams);
-        endCallButton.setOnClickListener(v -> {
-            continuousVoiceMode = false;
-            getSharedPreferences("nova_voice", MODE_PRIVATE).edit().putBoolean("continuous", false).putBoolean("session_active", false).apply();
+        callToggleButton = new Button(this);
+        updateContinuousVoiceButton();
+        styleButton(callToggleButton, true);
+        LinearLayout.LayoutParams callParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+        callParams.bottomMargin = dp(14);
+        root.addView(callToggleButton, callParams);
+        callToggleButton.setOnClickListener(v -> {
+            if (continuousVoiceMode) {
+                continuousVoiceMode = false;
+                getSharedPreferences("nova_voice", MODE_PRIVATE).edit()
+                        .putBoolean("continuous", false).putBoolean("session_active", false).apply();
+                if (textToSpeech != null) textToSpeech.stop();
+                stopVoiceSession();
+                status.setText("CHIAMATA TERMINATA · MICROFONO RILASCIATO");
+            } else {
+                continuousVoiceMode = true;
+                getSharedPreferences("nova_voice", MODE_PRIVATE).edit()
+                        .putBoolean("continuous", true).apply();
+                status.setText("APERTURA CHIAMATA...");
+                startListening();
+            }
             updateContinuousVoiceButton();
-            stopVoiceSession();
-            status.setText("CHIAMATA TERMINATA · MICROFONO RILASCIATO");
         });
 
         LinearLayout chatCard = panel();
@@ -305,7 +317,7 @@ public class MainActivity extends FragmentActivity {
         settingsPanel = panel();
         settingsPanel.setOrientation(LinearLayout.VERTICAL);
         settingsPanel.setPadding(dp(15), dp(15), dp(15), dp(15));
-        settingsPanel.setVisibility(View.GONE);
+        settingsPanel.setVisibility(View.VISIBLE);
         TextView settingsTitle = label("COLLEGA I TUOI SERVIZI AI", 13, Color.WHITE, true);
         settingsPanel.addView(settingsTitle, wrap());
 
@@ -315,7 +327,7 @@ public class MainActivity extends FragmentActivity {
 
         providerSpinner = new Spinner(this);
         String[] providers = {"AUTO · Groq (piano gratuito)",
-                "GROQ", "DEEPSEEK", "OPENAI", "GEMINI"};
+                "GROQ", "DEEPSEEK", "OPENAI", "GEMINI", "GROK · xAI (API a pagamento)"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, providers);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -330,10 +342,12 @@ public class MainActivity extends FragmentActivity {
         openAIInput = createKeyInput("Nuova chiave API OpenAI");
         geminiInput = createKeyInput("Nuova chiave API Gemini");
         groqInput = createKeyInput("Nuova chiave API Groq (gsk_...)");
+        grokInput = createKeyInput("Chiave API Grok / xAI (API a pagamento)");
         settingsPanel.addView(deepSeekInput, matchWidth());
         settingsPanel.addView(openAIInput, matchWidth());
         settingsPanel.addView(geminiInput, matchWidth());
         settingsPanel.addView(groqInput, matchWidth());
+        settingsPanel.addView(grokInput, matchWidth());
 
         TextView keyHint = label("Inserisci solo le chiavi nuove. I campi vuoti mantengono quelle già salvate.", 10,
                 MUTED, false);
@@ -553,9 +567,10 @@ public class MainActivity extends FragmentActivity {
         boolean open = hasKey("OPENAI");
         boolean gemini = hasKey("GEMINI");
         boolean groq = hasKey("GROQ");
+        boolean grok = hasKey("GROK");
         keyStatus.setText("Chiavi presenti: Groq " + yesNo(groq)
                 + " · DeepSeek " + yesNo(deep) + " · OpenAI " + yesNo(open)
-                + " · Gemini " + yesNo(gemini));
+                + " · Gemini " + yesNo(gemini) + " · Grok " + yesNo(grok));
     }
 
     private String yesNo(boolean value) {
@@ -574,6 +589,7 @@ public class MainActivity extends FragmentActivity {
         if ("DEEPSEEK".equals(wanted)) position = 2;
         if ("OPENAI".equals(wanted)) position = 3;
         if ("GEMINI".equals(wanted)) position = 4;
+        if ("GROK".equals(wanted)) position = 5;
         providerSpinner.setSelection(position);
     }
 
@@ -583,6 +599,7 @@ public class MainActivity extends FragmentActivity {
         if (position == 2) return "DEEPSEEK";
         if (position == 3) return "OPENAI";
         if (position == 4) return "GEMINI";
+        if (position == 5) return "GROK";
         return "AUTO";
     }
 
@@ -592,11 +609,13 @@ public class MainActivity extends FragmentActivity {
             saveIfProvided("OPENAI", openAIInput);
             saveIfProvided("GEMINI", geminiInput);
             saveIfProvided("GROQ", groqInput);
+            saveIfProvided("GROK", grokInput);
             keyStore.setSelectedProvider(selectedProvider());
             deepSeekInput.setText("");
             openAIInput.setText("");
             geminiInput.setText("");
             groqInput.setText("");
+            grokInput.setText("");
             rebuildAIManager();
             updateKeyStatus();
             Toast.makeText(this, "Configurazione salvata sul dispositivo.", Toast.LENGTH_LONG).show();
@@ -617,7 +636,8 @@ public class MainActivity extends FragmentActivity {
                 keyStore.getKey("OPENAI"),
                 keyStore.getKey("DEEPSEEK"),
                 keyStore.getKey("GEMINI"),
-                keyStore.getKey("GROQ"));
+                keyStore.getKey("GROQ"),
+                keyStore.getKey("GROK"));
         AIProvider provider = aiManager.getProvider();
         String selected = keyStore.getSelectedProvider();
         if (provider == null) {
@@ -640,6 +660,7 @@ public class MainActivity extends FragmentActivity {
                     keyStore.deleteKey("OPENAI");
                     keyStore.deleteKey("GEMINI");
                     keyStore.deleteKey("GROQ");
+                    keyStore.deleteKey("GROK");
                     keyStore.setSelectedProvider("AUTO");
                     try {
                         setSpinnerProvider("AUTO");
@@ -705,6 +726,9 @@ public class MainActivity extends FragmentActivity {
             continuousVoiceButton.setText(continuousVoiceMode
                     ? "ASCOLTO CONTINUO: ATTIVO · TOCCA PER DISATTIVARE"
                     : "ATTIVA ASCOLTO CONTINUO");
+        }
+        if (callToggleButton != null) {
+            callToggleButton.setText(continuousVoiceMode ? "CHIUDI CHIAMATA" : "APRI CHIAMATA");
         }
     }
 
@@ -931,7 +955,7 @@ public class MainActivity extends FragmentActivity {
         }
         new AlertDialog.Builder(this)
                 .setTitle("Confermi l'invio a " + active.getProviderName() + "?")
-                .setMessage("La richiesta e il contesto della conversazione verranno inviati a " + active.getProviderName() + ". Confermando, NOVA ricorderà questa autorizzazione anche dopo la chiusura dell'app e non te lo richiederà per ogni messaggio. Potrai revocarla dalle impostazioni. Per Groq usa esclusivamente il piano gratuito e non aggiungere metodi di pagamento. Altri provider potrebbero richiedere credito: NOVA non deve usarli se non sono configurati per un accesso gratuito.")
+                .setMessage("La richiesta e il contesto della conversazione verranno inviati a " + active.getProviderName() + ". Confermando, NOVA ricorderà questa autorizzazione anche dopo la chiusura dell'app. Potrai revocarla dalle impostazioni. ATTENZIONE: l'API Grok/xAI è a pagamento secondo i token e il modello scelto. Se autorizzi Grok, la richiesta può generare addebiti sul tuo account xAI. NOVA non passa automaticamente ad altri provider.")
                 .setNegativeButton("ANNULLA", (dialog, which) -> {
                     status.setText("INVIO ANNULLATO");
                     setControlsEnabled(true);
