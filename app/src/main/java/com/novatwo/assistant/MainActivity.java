@@ -91,6 +91,7 @@ public class MainActivity extends FragmentActivity {
     private LinearLayout mainRoot;
     private static final int MEDIA_PICK_REQUEST = 7110;
     private boolean biometricUnlocked = false;
+    private final java.util.Set<String> sessionApprovedProviders = new java.util.HashSet<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -604,6 +605,9 @@ public class MainActivity extends FragmentActivity {
         TextView line = label((assistant ? "NOVA  ·  " : "TU  ·  ") + body,
                 14, assistant ? Color.rgb(226, 235, 233) : Color.rgb(178, 192, 202), false);
         line.setPadding(0, dp(8), 0, dp(8));
+        Linkify.addLinks(line, Linkify.WEB_URLS | Linkify.EMAIL_ADDRESSES | Linkify.PHONE_NUMBERS);
+        line.setLinksClickable(true);
+        line.setMovementMethod(LinkMovementMethod.getInstance());
         chatHistory.addView(line, matchWidth());
         conversation = line;
     }
