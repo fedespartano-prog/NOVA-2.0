@@ -105,14 +105,33 @@ public final class PhoneActionRouter {
             return true;
         }
 
+        if (lower.equals("leggi schermata") || lower.equals("leggi questa schermata")) {
+            new android.app.AlertDialog.Builder(activity)
+                    .setTitle("Confermi la lettura?")
+                    .setMessage("NOVA leggerà il testo che l'app attiva rende accessibile e lo mostrerà nella conversazione. Non verrà inviato al provider AI finché non confermi separatamente un invio.")
+                    .setNegativeButton("ANNULLA", (d,w) -> callback.onResult("Lettura annullata."))
+                    .setPositiveButton("CONFERMA", (d,w) -> callback.onResult(NovaAccessibilityService.execute("leggi")))
+                    .show();
+            return true;
+        }
+
+        if (lower.startsWith("scrivi nel campo ")) {
+            String textToWrite = command.substring("scrivi nel campo ".length()).trim();
+            new android.app.AlertDialog.Builder(activity)
+                    .setTitle("Confermi la scrittura?")
+                    .setMessage("NOVA inserirà questo testo nel campo attivo. Non premerà il pulsante di invio:\n\n" + textToWrite)
+                    .setNegativeButton("ANNULLA", (d,w) -> callback.onResult("Scrittura annullata."))
+                    .setPositiveButton("CONFERMA", (d,w) -> callback.onResult(NovaAccessibilityService.execute("scrivi " + textToWrite)))
+                    .show();
+            return true;
+        }
+
         if (lower.equals("torna indietro") || lower.equals("vai alla home")
-                || lower.equals("apri notifiche") || lower.equals("scorri schermata")
-                || lower.startsWith("scrivi nel campo ")) {
+                || lower.equals("apri notifiche") || lower.equals("scorri schermata")) {
             String action = lower.equals("torna indietro") ? "indietro"
                     : lower.equals("vai alla home") ? "home"
                     : lower.equals("apri notifiche") ? "notifiche"
-                    : lower.equals("scorri schermata") ? "scorri"
-                    : "scrivi " + command.substring("scrivi nel campo ".length());
+                    : "scorri";
             callback.onResult(NovaAccessibilityService.execute(action));
             return true;
         }
