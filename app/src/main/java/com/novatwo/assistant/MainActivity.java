@@ -686,7 +686,7 @@ public class MainActivity extends FragmentActivity {
             if (content.trim().isEmpty()) continue;
             if (i == history.length() - 1 && content.equals(currentMessage)) continue;
             context.append("assistant".equals(role) ? "NOVA: " : "Utente: ");
-            context.append(content).append('\\n');
+            context.append(content).append('\n');
         }
         context.append("Richiesta attuale dell'utente: ").append(currentMessage);
         return context.toString();
