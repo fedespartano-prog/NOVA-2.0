@@ -135,7 +135,8 @@ public class GoogleServicesActivity extends Activity {
             status.setText("Google non ha restituito un token di accesso.");
             return;
         }
-        if ("GMAIL_SEND".equals(pendingService)) sendGmail(token);\n        else fetchService(pendingService, token);
+        if ("GMAIL_SEND".equals(pendingService)) sendGmail(token);
+        else fetchService(pendingService, token);
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
