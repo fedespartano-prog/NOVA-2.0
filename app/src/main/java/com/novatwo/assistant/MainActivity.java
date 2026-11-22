@@ -318,6 +318,13 @@ public class MainActivity extends FragmentActivity {
             }
         });
 
+        Button googleServicesButton = new Button(this);
+        googleServicesButton.setText("COLLEGA GMAIL · DRIVE · CALENDARIO");
+        styleButton(googleServicesButton, false);
+        settingsPanel.addView(googleServicesButton, fullButtonParams());
+        googleServicesButton.setOnClickListener(v -> startActivity(new Intent(this,
+                com.novatwo.assistant.integrations.GoogleServicesActivity.class)));
+
         Button accessibilityButton = new Button(this);
         accessibilityButton.setText("COLLEGA E CONTROLLA LE APP");
         styleButton(accessibilityButton, false);
