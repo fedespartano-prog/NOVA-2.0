@@ -295,6 +295,18 @@ public class MainActivity extends FragmentActivity {
         voiceSecurityInfo.setPadding(0, dp(8), 0, dp(4));
         settingsPanel.addView(voiceSecurityInfo, matchWidth());
 
+        Button accessibilityButton = new Button(this);
+        accessibilityButton.setText("COLLEGA E CONTROLLA LE APP");
+        styleButton(accessibilityButton, false);
+        settingsPanel.addView(accessibilityButton, fullButtonParams());
+        accessibilityButton.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("Controllo delle app")
+                .setMessage("Se attivi il servizio Accessibilità di NOVA, potrai chiederle di leggere il testo visibile, premere elementi e scrivere nei campi delle app che stai usando. Ogni lettura, tocco o scrittura avviata da NOVA richiede una conferma. Android e le singole app possono limitare alcune operazioni. Il contenuto dello schermo non viene registrato né inviato automaticamente.")
+                .setNegativeButton("NON ORA", null)
+                .setPositiveButton("APRI IMPOSTAZIONI", (dialog, which) ->
+                        startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)))
+                .show());
+
         Button mediaButton = new Button(this);
         mediaButton.setText("FOTO E VIDEO DAL TELEFONO");
         styleButton(mediaButton, false);
