@@ -687,6 +687,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 7105 && resultCode == RESULT_OK && data != null
+                && data.getData() != null) {
+            PhoneActionRouter.shareSelectedPhoto(this, data.getData());
+            return;
+        }
         if (requestCode == MEDIA_PICK_REQUEST && resultCode == RESULT_OK && data != null
                 && data.getData() != null) {
             Uri uri = data.getData();
