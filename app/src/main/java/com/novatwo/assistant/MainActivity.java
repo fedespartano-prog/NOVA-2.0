@@ -893,6 +893,13 @@ public class MainActivity extends FragmentActivity {
 
     private void startListening() {
         if (requestInProgress) return;
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            continuousVoiceMode = false;
+            getSharedPreferences("nova_voice", MODE_PRIVATE).edit().putBoolean("continuous", false).apply();
+            updateContinuousVoiceButton();
+            status.setText("RICONOSCIMENTO VOCALE NON DISPONIBILE SU QUESTO TELEFONO");
+            return;
+        }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, AUDIO_PERMISSION);
             return;
@@ -906,6 +913,10 @@ public class MainActivity extends FragmentActivity {
             status.setText("CHIAMATA ATTIVA · NOVA TI ASCOLTA ANCHE IN BACKGROUND");
             setControlsEnabled(true);
         } catch (Exception e) {
+            continuousVoiceMode = false;
+            getSharedPreferences("nova_voice", MODE_PRIVATE).edit()
+                    .putBoolean("continuous", false).putBoolean("session_active", false).apply();
+            updateContinuousVoiceButton();
             status.setText("IMPOSSIBILE AVVIARE LA CHIAMATA VOCALE");
             Toast.makeText(this, "Controlla il permesso microfono e le notifiche.", Toast.LENGTH_LONG).show();
         }
@@ -947,7 +958,9 @@ public class MainActivity extends FragmentActivity {
         }
         AIProvider active = aiManager.getProvider();
         String providerConsentKey = active.getProviderName().toLowerCase(Locale.ROOT);
-        boolean providerAlreadyApproved = getSharedPreferences("nova_provider_consent", MODE_PRIVATE)
+        boolean paidGrok = active.getProviderName().toLowerCase(Locale.ROOT).contains("grok");
+        boolean providerAlreadyApproved = !paidGrok
+                && getSharedPreferences("nova_provider_consent", MODE_PRIVATE)
                 .getBoolean(providerConsentKey, false);
         if (providerAlreadyApproved) {
             sendConfirmedAIMessage(message, active);
@@ -955,16 +968,22 @@ public class MainActivity extends FragmentActivity {
         }
         new AlertDialog.Builder(this)
                 .setTitle("Confermi l'invio a " + active.getProviderName() + "?")
-                .setMessage("La richiesta e il contesto della conversazione verranno inviati a " + active.getProviderName() + ". Confermando, NOVA ricorderà questa autorizzazione anche dopo la chiusura dell'app. Potrai revocarla dalle impostazioni. ATTENZIONE: l'API Grok/xAI è a pagamento secondo i token e il modello scelto. Se autorizzi Grok, la richiesta può generare addebiti sul tuo account xAI. NOVA non passa automaticamente ad altri provider.")
+                .setMessage("La richiesta e il contesto della conversazione verranno inviati a " + active.getProviderName() + ". "
+                        + (paidGrok
+                        ? "ATTENZIONE: l'API Grok/xAI è a pagamento secondo i token e il modello scelto. Questa singola richiesta può generare un addebito sul tuo account xAI. Ti chiederò conferma ogni volta."
+                        : "Confermando, NOVA ricorderà questa autorizzazione anche dopo la chiusura dell'app. Potrai revocarla dalle impostazioni.")
+                        + " NOVA non passa automaticamente ad altri provider.")
                 .setNegativeButton("ANNULLA", (dialog, which) -> {
                     status.setText("INVIO ANNULLATO");
                     setControlsEnabled(true);
                     if (continuousVoiceMode) mainRoot.postDelayed(() -> startListening(), 500);
                 })
-                .setPositiveButton("AUTORIZZA SEMPRE E INVIA", (dialog, which) -> {
-                    getSharedPreferences("nova_provider_consent", MODE_PRIVATE).edit()
-                            .putBoolean(providerConsentKey, true).apply();
-                    sessionApprovedProviders.add(providerConsentKey);
+                .setPositiveButton(paidGrok ? "AUTORIZZA SOLO QUESTA VOLTA" : "AUTORIZZA SEMPRE E INVIA", (dialog, which) -> {
+                    if (!paidGrok) {
+                        getSharedPreferences("nova_provider_consent", MODE_PRIVATE).edit()
+                                .putBoolean(providerConsentKey, true).apply();
+                        sessionApprovedProviders.add(providerConsentKey);
+                    }
                     sendConfirmedAIMessage(message, active);
                 })
                 .show();
@@ -1191,6 +1210,10 @@ public class MainActivity extends FragmentActivity {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startListening();
             } else {
+                continuousVoiceMode = false;
+                getSharedPreferences("nova_voice", MODE_PRIVATE).edit()
+                        .putBoolean("continuous", false).putBoolean("session_active", false).apply();
+                updateContinuousVoiceButton();
                 status.setText("PERMESSO MICROFONO NON CONCESSO");
                 setControlsEnabled(true);
             }
