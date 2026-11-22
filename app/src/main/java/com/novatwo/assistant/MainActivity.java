@@ -986,9 +986,7 @@ public class MainActivity extends FragmentActivity {
             if (!emoji && type != Character.FORMAT) cleaned.appendCodePoint(cp);
         }
         return cleaned.toString()
-                .replaceAll("(?i)(?<!\\\\w)[:;=8x][-^']?[)(/\\\\]", " ")
                 .replaceAll("[ \\t]{2,}", " ")
-                .replaceAll("\\\\s+([,.!?;:])", "$1")
                 .trim();
     }
 
