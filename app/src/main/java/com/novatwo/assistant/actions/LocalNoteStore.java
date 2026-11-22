@@ -3,6 +3,8 @@ package com.novatwo.assistant.actions;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import com.novatwo.assistant.memory.LocalCipher;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -10,6 +12,7 @@ import org.json.JSONObject;
 public final class LocalNoteStore {
     private static final String PREFS = "nova_local_notes";
     private static final String KEY = "notes";
+    private static final String ENCRYPTED_PREFIX = "ENC:";
     private final SharedPreferences preferences;
 
     public LocalNoteStore(Context context) {
@@ -30,8 +33,11 @@ public final class LocalNoteStore {
                 for (int i = 1; i < notes.length(); i++) trimmed.put(notes.opt(i));
                 notes = trimmed;
             }
-            preferences.edit().putString(KEY, notes.toString()).apply();
-        } catch (JSONException ignored) { }
+            preferences.edit().putString(KEY,
+                    ENCRYPTED_PREFIX + LocalCipher.encrypt(notes.toString())).apply();
+        } catch (Exception ignored) {
+            // Le note non vengono salvate in chiaro se la cifratura non è disponibile.
+        }
     }
 
     public synchronized String latest(int limit) {
@@ -51,7 +57,22 @@ public final class LocalNoteStore {
     }
 
     private JSONArray read() {
-        try { return new JSONArray(preferences.getString(KEY, "[]")); }
-        catch (JSONException e) { return new JSONArray(); }
+        String saved = preferences.getString(KEY, "[]");
+        try {
+            if (saved.startsWith(ENCRYPTED_PREFIX)) {
+                return new JSONArray(LocalCipher.decrypt(saved.substring(ENCRYPTED_PREFIX.length())));
+            }
+            // Migrazione trasparente delle note precedenti.
+            JSONArray legacy = new JSONArray(saved);
+            if (legacy.length() > 0) {
+                try {
+                    preferences.edit().putString(KEY,
+                            ENCRYPTED_PREFIX + LocalCipher.encrypt(legacy.toString())).apply();
+                } catch (Exception ignored) { }
+            }
+            return legacy;
+        } catch (Exception e) {
+            return new JSONArray();
+        }
     }
 }
