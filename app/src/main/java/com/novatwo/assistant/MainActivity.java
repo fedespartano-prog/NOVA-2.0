@@ -703,7 +703,15 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void sendMessage(String message) {
-        if (message != null && PhoneActionRouter.handle(this, message, result -> runOnUiThread(() -> {
+        AIProvider selectedForSearch = aiManager == null ? null : aiManager.getProvider();
+        String normalizedMessage = message == null ? "" : message.toLowerCase(Locale.ROOT);
+        boolean deepSeekWebSearch = selectedForSearch != null
+                && "deepseek".equalsIgnoreCase(selectedForSearch.getProviderName())
+                && (normalizedMessage.startsWith("cerca su internet ")
+                || normalizedMessage.startsWith("cerca sul web ")
+                || normalizedMessage.startsWith("cerca online ")
+                || normalizedMessage.startsWith("fai una ricerca web "));
+        if (message != null && !deepSeekWebSearch && PhoneActionRouter.handle(this, message, result -> runOnUiThread(() -> {
             addChatLine("assistant", result);
             status.setText("OPERAZIONE PRONTA");
             speak(result);
