@@ -60,7 +60,8 @@ public class MainActivity extends FragmentActivity {
     private static final int AUDIO_PERMISSION = 100;
     private static final int BG = Color.rgb(5, 7, 11);
     private static final int PANEL = Color.rgb(15, 19, 25);
-    private static final int GREEN = Color.rgb(0, 255, 164);
+    private static final int GREEN = Color.rgb(45, 115, 255);
+    private static final int VIOLET = Color.rgb(174, 70, 255);
     private static final int MUTED = Color.rgb(139, 151, 163);
 
     private APIKeyStore keyStore;
@@ -134,10 +135,16 @@ public class MainActivity extends FragmentActivity {
         brand.setLetterSpacing(0.16f);
         header.addView(brand, new LinearLayout.LayoutParams(0, dp(42), 1));
 
-        TextView version = label("2.0  /  PERSONAL AI", 10, MUTED, true);
+        TextView version = label("2.0  /  PERSONAL AI", 10, VIOLET, true);
         version.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
         header.addView(version);
         root.addView(header, matchWidth());
+        Button settingsToggle = new Button(this);
+        settingsToggle.setText("⚙");
+        styleButton(settingsToggle, false);
+        settingsToggle.setTextSize(20);
+        header.addView(settingsToggle, new LinearLayout.LayoutParams(dp(52), dp(44)));
+
 
         TextView intro = label("IL TUO ASSISTENTE", 10, GREEN, true);
         intro.setLetterSpacing(0.22f);
@@ -188,7 +195,6 @@ public class MainActivity extends FragmentActivity {
         conversation = welcome;
         LinearLayout.LayoutParams chatParams = matchWidth();
         chatParams.bottomMargin = dp(14);
-        root.addView(chatCard, chatParams);
 
         LinearLayout composer = panel();
         composer.setOrientation(LinearLayout.VERTICAL);
@@ -227,21 +233,45 @@ public class MainActivity extends FragmentActivity {
         actions.addView(sendButton, sendParams);
         sendButton.setOnClickListener(v -> sendTypedMessage());
         composer.addView(actions, matchWidth());
-        root.addView(composer, matchWidth());
+
+        LinearLayout chatDialogContent = new LinearLayout(this);
+        chatDialogContent.setOrientation(LinearLayout.VERTICAL);
+        chatDialogContent.setPadding(dp(12), dp(12), dp(12), dp(12));
+        chatDialogContent.setBackgroundColor(BG);
+        ScrollView historyScroll = new ScrollView(this);
+        historyScroll.setFillViewport(false);
+        historyScroll.addView(chatCard);
+        chatDialogContent.addView(historyScroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(330), 1));
+        LinearLayout.LayoutParams composerDialogParams = matchWidth();
+        composerDialogParams.topMargin = dp(10);
+        chatDialogContent.addView(composer, composerDialogParams);
+
+        Button chatToggle = new Button(this);
+        chatToggle.setText("APRI CONVERSAZIONE");
+        styleButton(chatToggle, true);
+        LinearLayout.LayoutParams chatToggleParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        chatToggleParams.topMargin = dp(18);
+        root.addView(chatToggle, chatToggleParams);
+        chatToggle.setOnClickListener(v -> {
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                    .setTitle("NOVA · CONVERSAZIONE")
+                    .setView(chatDialogContent)
+                    .setNegativeButton("CHIUDI", null)
+                    .create();
+            dialog.show();
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT);
+            }
+        });
 
         TextView providerLine = label("AI · AUTO usa Groq (piano gratuito, con limiti)", 10, MUTED, false);
         providerLine.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams providerParams = wrap();
         providerParams.topMargin = dp(13);
         root.addView(providerLine, providerParams);
-
-        Button settingsToggle = new Button(this);
-        settingsToggle.setText("IMPOSTAZIONI  ⚙");
-        styleButton(settingsToggle, false);
-        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
-        toggleParams.topMargin = dp(10);
-        root.addView(settingsToggle, toggleParams);
 
         settingsPanel = panel();
         settingsPanel.setOrientation(LinearLayout.VERTICAL);
@@ -370,15 +400,21 @@ public class MainActivity extends FragmentActivity {
                 MUTED, false);
         privacy.setPadding(0, dp(10), 0, 0);
         settingsPanel.addView(privacy, matchWidth());
-        LinearLayout.LayoutParams settingsParams = matchWidth();
-        settingsParams.topMargin = dp(10);
-        root.addView(settingsPanel, settingsParams);
-
+        ScrollView settingsScroll = new ScrollView(this);
+        settingsScroll.setFillViewport(false);
+        settingsScroll.setBackgroundColor(BG);
+        settingsScroll.addView(settingsPanel);
         settingsToggle.setOnClickListener(v -> {
-            settingsPanel.setVisibility(settingsPanel.getVisibility() == View.VISIBLE
-                    ? View.GONE : View.VISIBLE);
-            settingsToggle.setText(settingsPanel.getVisibility() == View.VISIBLE
-                    ? "CHIUDI IMPOSTAZIONI  ×" : "IMPOSTAZIONI  ⚙");
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                    .setTitle("NOVA · IMPOSTAZIONI")
+                    .setView(settingsScroll)
+                    .setNegativeButton("CHIUDI", null)
+                    .create();
+            dialog.show();
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT);
+            }
         });
 
         page.addView(root);
@@ -411,8 +447,8 @@ public class MainActivity extends FragmentActivity {
         button.setTextColor(primary ? BG : Color.WHITE);
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(16));
-        bg.setColor(primary ? GREEN : Color.rgb(25, 31, 39));
-        if (!primary) bg.setStroke(dp(1), Color.rgb(48, 59, 67));
+        bg.setColor(primary ? Color.rgb(88, 91, 255) : Color.rgb(20, 24, 43));
+        if (!primary) bg.setStroke(dp(1), Color.rgb(77, 91, 180));
         button.setBackground(bg);
         button.setPadding(dp(10), 0, dp(10), 0);
     }
@@ -623,9 +659,21 @@ public class MainActivity extends FragmentActivity {
     private void initializeTextToSpeech() {
         textToSpeech = new TextToSpeech(this, result -> {
             if (result == TextToSpeech.SUCCESS && textToSpeech != null) {
-                int language = textToSpeech.setLanguage(Locale.ITALIAN);
+                int language = textToSpeech.setLanguage(Locale.forLanguageTag("it-IT"));
                 ttsReady = language != TextToSpeech.LANG_MISSING_DATA
                         && language != TextToSpeech.LANG_NOT_SUPPORTED;
+                if (ttsReady) {
+                    textToSpeech.setSpeechRate(0.94f);
+                    textToSpeech.setPitch(1.02f);
+                    if (android.os.Build.VERSION.SDK_INT >= 21 && textToSpeech.getVoices() != null) {
+                        android.speech.tts.Voice bestItalian = null;
+                        for (android.speech.tts.Voice voice : textToSpeech.getVoices()) {
+                            if (voice == null || !voice.getLocale().getLanguage().equals("it")) continue;
+                            if (bestItalian == null || voice.getQuality() > bestItalian.getQuality()) bestItalian = voice;
+                        }
+                        if (bestItalian != null) textToSpeech.setVoice(bestItalian);
+                    }
+                }
                 textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String utteranceId) {
                         runOnUiThread(() -> {
@@ -731,6 +779,8 @@ public class MainActivity extends FragmentActivity {
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "it-IT");
         intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "it-IT");
         setControlsEnabled(false);
         try {
             recognizer.startListening(intent);
@@ -1062,18 +1112,27 @@ public class MainActivity extends FragmentActivity {
             float cy = getHeight() / 2f;
             float radius = Math.min(getWidth(), getHeight()) * 0.39f;
 
-            paint.setShader(new RadialGradient(cx, cy, radius * 1.55f,
-                    new int[]{0x5530FFD0, 0x2220BFAF, 0x0010A0A0},
+            paint.setShader(new RadialGradient(cx, cy, radius * 1.65f,
+                    new int[]{0x664D7CFF, 0x334F35FF, 0x00100030},
                     null, Shader.TileMode.CLAMP));
             canvas.drawCircle(cx, cy, radius * 1.55f, paint);
             paint.setShader(null);
 
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dp(1.2f));
-            paint.setColor(0x6639F5C2);
+            paint.setColor(0xAA4D8DFF);
             canvas.drawCircle(cx, cy, radius * 1.13f, paint);
-            paint.setColor(0x3339F5C2);
+            paint.setColor(0x664D8DFF);
             canvas.drawCircle(cx, cy, radius * 1.22f, paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(2));
+            paint.setColor(0x665E42FF);
+            canvas.drawOval(cx - radius * 0.78f, cy + radius * 0.88f,
+                    cx + radius * 0.78f, cy + radius * 1.10f, paint);
+            paint.setStrokeWidth(dp(1.3f));
+            paint.setColor(0x445F9CFF);
+            canvas.drawOval(cx - radius * 1.02f, cy + radius * 0.96f,
+                    cx + radius * 1.02f, cy + radius * 1.23f, paint);
 
             paint.setStyle(Paint.Style.FILL);
             paint.setShader(new RadialGradient(cx - radius * 0.32f, cy - radius * 0.38f,
@@ -1085,9 +1144,9 @@ public class MainActivity extends FragmentActivity {
 
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dp(1.4f));
-            paint.setColor(0xAA91FFE0);
+            paint.setColor(0xAA8DB7FF);
             canvas.drawCircle(cx, cy, radius, paint);
-            paint.setColor(0x4476EED0);
+            paint.setColor(0x665B4BFF);
             paint.setStrokeWidth(dp(5));
             canvas.drawArc(cx - radius + dp(5), cy - radius + dp(5),
                     cx + radius - dp(5), cy + radius - dp(5),
@@ -1099,8 +1158,8 @@ public class MainActivity extends FragmentActivity {
             paint.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
             paint.setTextAlign(Paint.Align.CENTER);
             paint.setTextSize(radius * 1.18f);
-            paint.setColor(GREEN);
-            paint.setShadowLayer(dp(18), 0, 0, 0xCC00FFAA);
+            paint.setColor(0xFF9D7BFF);
+            paint.setShadowLayer(dp(18), 0, 0, 0xCC6A42FF);
             canvas.drawText("N", cx, cy + radius * 0.39f, paint);
             paint.clearShadowLayer();
             canvas.restore();
