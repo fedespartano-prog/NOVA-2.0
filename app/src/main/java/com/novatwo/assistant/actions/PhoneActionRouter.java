@@ -103,6 +103,35 @@ public final class PhoneActionRouter {
             return true;
         }
 
+        if (lower.contains("attiva controllo schermo") || lower.contains("attiva accessibilità nova")) {
+            activity.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            callback.onResult("Si sono aperte le impostazioni di Accessibilità. Cerca NOVA e attiva il servizio solo se vuoi consentirle di interagire con le schermate.");
+            return true;
+        }
+
+        if (lower.equals("torna indietro") || lower.equals("vai alla home")
+                || lower.equals("apri notifiche") || lower.equals("scorri schermata")
+                || lower.startsWith("scrivi nel campo ")) {
+            String action = lower.equals("torna indietro") ? "indietro"
+                    : lower.equals("vai alla home") ? "home"
+                    : lower.equals("apri notifiche") ? "notifiche"
+                    : lower.equals("scorri schermata") ? "scorri"
+                    : "scrivi " + command.substring("scrivi nel campo ".length());
+            callback.onResult(NovaAccessibilityService.execute(action));
+            return true;
+        }
+
+        if (lower.startsWith("tocca ")) {
+            String label = command.substring(6).trim();
+            new android.app.AlertDialog.Builder(activity)
+                    .setTitle("Confermi il tocco?")
+                    .setMessage("NOVA proverà a premere «" + label + "» nella schermata attiva. Se è un pulsante di invio o conferma, l'operazione potrebbe essere definitiva.")
+                    .setNegativeButton("ANNULLA", (d,w) -> callback.onResult("Operazione annullata."))
+                    .setPositiveButton("CONFERMA", (d,w) -> callback.onResult(NovaAccessibilityService.execute("tocca " + label)))
+                    .show();
+            return true;
+        }
+
         if (lower.startsWith("apri impostazioni")) {
             activity.startActivity(new Intent(Settings.ACTION_SETTINGS));
             callback.onResult("Ho aperto le impostazioni Android.");
