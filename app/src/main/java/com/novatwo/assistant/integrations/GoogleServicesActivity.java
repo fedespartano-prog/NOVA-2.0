@@ -12,6 +12,7 @@ import android.graphics.Color;
 
 import com.google.android.gms.auth.api.identity.AuthorizationRequest;
 import com.google.android.gms.auth.api.identity.AuthorizationResult;
+import com.google.android.gms.auth.api.identity.RevokeAccessRequest;
 import com.google.android.gms.auth.api.identity.Identity;
 import com.google.android.gms.common.api.Scope;
 
@@ -63,7 +64,7 @@ public class GoogleServicesActivity extends Activity {
         root.addView(revoke, new LinearLayout.LayoutParams(-1,-2));
         revoke.setOnClickListener(v -> {
             status.setText("Revoca dell'accesso in corso...");
-            Identity.getAuthorizationClient(this).revokeAccess()
+            Identity.getAuthorizationClient(this).revokeAccess(RevokeAccessRequest.builder().build())
                     .addOnSuccessListener(unused -> status.setText("Accesso Google revocato."))
                     .addOnFailureListener(error -> status.setText("Revoca non riuscita: " + safe(error.getMessage())));
         });
@@ -132,7 +133,7 @@ public class GoogleServicesActivity extends Activity {
                 } else if ("DRIVE".equals(service)) {
                     endpoint = "https://www.googleapis.com/drive/v3/files?pageSize=20&orderBy=modifiedTime%20desc&fields=files(id,name,mimeType,modifiedTime)";
                 } else {
-                    endpoint = "https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=15&singleEvents=true";
+                    endpoint = "https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=15";
                 }
                 connection = (HttpURLConnection) new URL(endpoint).openConnection();
                 connection.setRequestMethod("GET");
@@ -148,7 +149,7 @@ public class GoogleServicesActivity extends Activity {
                     while ((line = reader.readLine()) != null) body.append(line);
                 }
                 if (code < 200 || code >= 300) throw new Exception("Google API HTTP " + code + ": " + body);
-                String summary = summarize(service, new JSONObject(body.toString()));
+                String summary = summarize(service, new JSONObject(body.toString()), token);
                 runOnUiThread(() -> status.setText(summary));
             } catch (Exception e) {
                 String message = "Errore " + service + ": " + safe(e.getMessage());
@@ -159,13 +160,25 @@ public class GoogleServicesActivity extends Activity {
         }).start();
     }
 
-    private String summarize(String service, JSONObject json) throws Exception {
+    private String summarize(String service, JSONObject json, String token) throws Exception {
         StringBuilder out = new StringBuilder();
         if ("GMAIL".equals(service)) {
             JSONArray items = json.optJSONArray("messages");
             int count = items == null ? 0 : items.length();
             out.append("GMAIL · ").append(json.optInt("resultSizeEstimate", count)).append(" messaggi stimati. Ultimi ID:\n");
-            for (int i=0; i<count; i++) out.append("• ").append(items.getJSONObject(i).optString("id")).append('\n');
+            for (int i=0; i<count; i++) {
+                JSONObject detail = fetchGmailMetadata(items.getJSONObject(i).optString("id"), token);
+                JSONObject payload = detail.optJSONObject("payload");
+                JSONArray headers = payload == null ? null : payload.optJSONArray("headers");
+                String subject = "(senza oggetto)";
+                String from = "";
+                if (headers != null) for (int h=0; h<headers.length(); h++) {
+                    JSONObject header = headers.getJSONObject(h);
+                    if ("subject".equalsIgnoreCase(header.optString("name"))) subject = header.optString("value");
+                    if ("from".equalsIgnoreCase(header.optString("name"))) from = header.optString("value");
+                }
+                out.append("• ").append(subject).append(from.isEmpty() ? "" : " · " + from).append('\n');
+            }
         } else if ("DRIVE".equals(service)) {
             JSONArray files = json.optJSONArray("files");
             int count = files == null ? 0 : files.length();
@@ -186,6 +199,31 @@ public class GoogleServicesActivity extends Activity {
             }
         }
         return out.toString().trim();
+    }
+
+    private JSONObject fetchGmailMetadata(String id, String token) throws Exception {
+        HttpURLConnection connection = null;
+        try {
+            String endpoint = "https://gmail.googleapis.com/gmail/v1/users/me/messages/"
+                    + id + "?format=metadata&metadataHeaders=Subject&metadataHeaders=From";
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(12000);
+            connection.setRequestProperty("Authorization", "Bearer " + token);
+            int code = connection.getResponseCode();
+            InputStream stream = code >= 200 && code < 300
+                    ? connection.getInputStream() : connection.getErrorStream();
+            StringBuilder body = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) body.append(line);
+            }
+            if (code < 200 || code >= 300) throw new Exception("Gmail HTTP " + code);
+            return new JSONObject(body.toString());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
     }
 
     private String safe(String value) {
