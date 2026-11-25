@@ -311,7 +311,7 @@ public class MainActivity extends FragmentActivity {
             }
         });
 
-        TextView providerLine = label("AI · AUTO usa Groq (piano gratuito, con limiti)", 10, MUTED, false);
+        TextView providerLine = label("AI · GEMINI", 10, MUTED, false);
         providerLine.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams providerParams = wrap();
         providerParams.topMargin = dp(13);
@@ -329,8 +329,7 @@ public class MainActivity extends FragmentActivity {
         settingsPanel.addView(providerStatus, matchWidth());
 
         providerSpinner = new Spinner(this);
-        String[] providers = {"AUTO · DeepSeek → Groq → Gemini",
-                "GROQ", "DEEPSEEK", "OPENAI", "GEMINI", "GROK · xAI (API a pagamento)"};
+        String[] providers = {"GEMINI · UNICO PROVIDER ATTIVO"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, providers);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -341,18 +340,10 @@ public class MainActivity extends FragmentActivity {
         keyStatus.setPadding(0, dp(8), 0, dp(3));
         settingsPanel.addView(keyStatus, matchWidth());
 
-        deepSeekInput = createKeyInput("Nuova chiave API DeepSeek");
-        openAIInput = createKeyInput("Nuova chiave API OpenAI");
-        geminiInput = createKeyInput("Nuova chiave API Gemini");
-        groqInput = createKeyInput("Nuova chiave API Groq (gsk_...)");
-        grokInput = createKeyInput("Chiave API Grok / xAI (API a pagamento)");
-        settingsPanel.addView(deepSeekInput, matchWidth());
-        settingsPanel.addView(openAIInput, matchWidth());
+        geminiInput = createKeyInput("Incolla qui la chiave API Gemini");
         settingsPanel.addView(geminiInput, matchWidth());
-        settingsPanel.addView(groqInput, matchWidth());
-        settingsPanel.addView(grokInput, matchWidth());
 
-        TextView keyHint = label("Inserisci solo le chiavi nuove. I campi vuoti mantengono quelle già salvate.", 10,
+        TextView keyHint = label("NOVA usa soltanto Gemini. La chiave resta salvata in modo protetto sul telefono.", 10,
                 MUTED, false);
         settingsPanel.addView(keyHint, matchWidth());
 
@@ -579,14 +570,8 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void updateKeyStatus() throws Exception {
-        boolean deep = hasKey("DEEPSEEK");
-        boolean open = hasKey("OPENAI");
         boolean gemini = hasKey("GEMINI");
-        boolean groq = hasKey("GROQ");
-        boolean grok = hasKey("GROK");
-        keyStatus.setText("Chiavi presenti: Groq " + yesNo(groq)
-                + " · DeepSeek " + yesNo(deep) + " · OpenAI " + yesNo(open)
-                + " · Gemini " + yesNo(gemini) + " · Grok " + yesNo(grok));
+        keyStatus.setText("Chiave Gemini sul telefono: " + (gemini ? "SALVATA" : "NON SALVATA"));
     }
 
     private String yesNo(boolean value) {
@@ -599,44 +584,27 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void setSpinnerProvider(String provider) {
-        String wanted = provider == null ? "AUTO" : provider.toUpperCase(Locale.ROOT);
-        int position = 0;
-        if ("GROQ".equals(wanted)) position = 1;
-        if ("DEEPSEEK".equals(wanted)) position = 2;
-        if ("OPENAI".equals(wanted)) position = 3;
-        if ("GEMINI".equals(wanted)) position = 4;
-        if ("GROK".equals(wanted)) position = 5;
-        providerSpinner.setSelection(position);
+        if (providerSpinner != null) providerSpinner.setSelection(0);
     }
 
     private String selectedProvider() {
-        int position = providerSpinner.getSelectedItemPosition();
-        if (position == 1) return "GROQ";
-        if (position == 2) return "DEEPSEEK";
-        if (position == 3) return "OPENAI";
-        if (position == 4) return "GEMINI";
-        if (position == 5) return "GROK";
-        return "AUTO";
+        return "GEMINI";
     }
 
     private void saveAIConfiguration() {
         try {
-            saveIfProvided("DEEPSEEK", deepSeekInput);
-            saveIfProvided("OPENAI", openAIInput);
             saveIfProvided("GEMINI", geminiInput);
-            saveIfProvided("GROQ", groqInput);
-            saveIfProvided("GROK", grokInput);
-            keyStore.setSelectedProvider(selectedProvider());
-            deepSeekInput.setText("");
-            openAIInput.setText("");
+            keyStore.setSelectedProvider("GEMINI");
+            String savedKey = keyStore.getKey("GEMINI");
+            if (savedKey == null || savedKey.trim().isEmpty()) {
+                throw new IllegalStateException("La chiave Gemini non risulta salvata sul telefono.");
+            }
             geminiInput.setText("");
-            groqInput.setText("");
-            grokInput.setText("");
             rebuildAIManager();
             updateKeyStatus();
-            Toast.makeText(this, "Configurazione salvata sul dispositivo.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Chiave Gemini salvata e riletta correttamente sul telefono.", Toast.LENGTH_LONG).show();
         } catch (Exception e) {
-            Toast.makeText(this, "Salvataggio non riuscito: " + safeMessage(e),
+            Toast.makeText(this, "Salvataggio Gemini non riuscito: " + safeMessage(e),
                     Toast.LENGTH_LONG).show();
         }
     }
