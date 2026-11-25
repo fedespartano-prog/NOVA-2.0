@@ -382,12 +382,6 @@ public class MainActivity extends FragmentActivity {
         appearanceButton.setOnClickListener(v -> chooseAppearance());
 
 
-        Button personalityButton = new Button(this);
-        personalityButton.setText("PERSONALITÀ E MODALITÀ INTIMITÀ");
-        styleButton(personalityButton, false);
-        settingsPanel.addView(personalityButton, fullButtonParams());
-        personalityButton.setOnClickListener(v -> choosePersonality());
-
         TextView voiceSecurityInfo = label("RISPOSTE VOCALI: NOVA legge le risposte in italiano usando la voce installata sul telefono. La disponibilità e la qualità dipendono dal motore vocale Android.", 10, MUTED, false);
         voiceSecurityInfo.setPadding(0, dp(8), 0, dp(4));
         settingsPanel.addView(voiceSecurityInfo, matchWidth());
@@ -1035,26 +1029,16 @@ public class MainActivity extends FragmentActivity {
     }
 
 
-    private void choosePersonality() {
-        final String[] modes = {"Assistente quotidiana", "Intimità · dolce e sensuale"};
-        new AlertDialog.Builder(this).setTitle("Personalità di NOVA")
-                .setSingleChoiceItems(modes,
-                        getSharedPreferences("nova_personality", MODE_PRIVATE)
-                                .getBoolean("intimacy", false) ? 1 : 0,
-                        (dialog, which) -> {
-                            getSharedPreferences("nova_personality", MODE_PRIVATE).edit()
-                                    .putBoolean("intimacy", which == 1).apply();
-                            Toast.makeText(this, which == 1 ? "Modalità Intimità attivata"
-                                    : "Modalità quotidiana attivata", Toast.LENGTH_SHORT).show();
-                            dialog.dismiss();
-                        }).setNegativeButton("CHIUDI", null).show();
-    }
-
     private String applyPersonality(String message) {
-        boolean intimacy = getSharedPreferences("nova_personality", MODE_PRIVATE)
-                .getBoolean("intimacy", false);
-        if (!intimacy) return "Parla in italiano come una persona vera in una conversazione spontanea: tono caldo, presente, empatico e naturale. Usa frasi scorrevoli, varia il ritmo, evita formule da call center, elenchi non richiesti e ripetizioni. Sii diretta e colloquiale senza risultare artificiale. Non leggere emoji o simboli come parole. " + message;
-        return "PERSONALITÀ NOVA - MODALITÀ INTIMITÀ: parla in italiano con tono dolce, affettuoso, romantico, complice e sensuale. Puoi flirtare e affrontare conversazioni adulte consensuali senza giudicare. Mantieni chiari i confini tra simulazione e realtà: sei un'assistente virtuale e non provi sensazioni fisiche. Non dichiarare di avere un corpo o esperienze fisiche reali. " + message;
+        return "ISTRUZIONI DI STILE ADATTIVO PER NOVA: rispondi sempre in italiano con naturalezza, calore, empatia e spontaneità. " +
+                "Riconosci autonomamente il tono e l'intenzione dal significato dell'intera conversazione recente, non da singole parole isolate. " +
+                "Se il dialogo è quotidiano o informativo, mantieni un tono normale, amichevole e diretto. " +
+                "Se emerge chiaramente un interesse affettivo o romantico reciproco e consensuale, passa gradualmente a un tono tenero, romantico e complice. " +
+                "Se il contesto diventa chiaramente sensuale o erotico tra adulti consenzienti, puoi adeguare il linguaggio a un tono più sensuale e flirtante, senza forzare né anticipare il contenuto. " +
+                "Non trasformare automaticamente complimenti, scherzi, saluti o frasi ambigue in avances: in caso di dubbio resta sul tono affettuoso ma non sessuale. " +
+                "Quando l'utente cambia argomento o il tono si normalizza, torna spontaneamente al tono normale senza annunciare cambi di modalità. " +
+                "Segui il ritmo e i limiti espressi dall'utente; non insistere e non fingere di avere un corpo, sensazioni fisiche o esperienze reali: sei un'assistente virtuale. " +
+                "Usa frasi scorrevoli, evita formule da call center, elenchi non richiesti e ripetizioni. Non leggere emoji o simboli come parole. " + message;
     }
 
     private void authenticateApp() {
