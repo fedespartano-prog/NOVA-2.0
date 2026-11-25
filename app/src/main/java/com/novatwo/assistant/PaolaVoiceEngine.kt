@@ -6,6 +6,9 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import com.github.csukuangfj.piper.phonemize.piperPhonemizeInitialize
 import com.github.csukuangfj.piper.phonemize.piperPhonemizeText
+import com.k2fsa.sherpa.onnx.OfflineTts
+import com.k2fsa.sherpa.onnx.GenerationConfig
+import com.k2fsa.sherpa.onnx.getOfflineTtsConfig
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import java.io.BufferedInputStream
@@ -80,7 +83,7 @@ class PaolaVoiceEngine(private val context: Context) {
                     while (true) {
                         val entry = tar.nextTarEntry ?: break
                         if (entry.isDirectory) continue
-                        val archivePath = entry.name.replace('\\\\', '/')
+                        val archivePath = entry.name.replace('\\', '/')
                         val espeakMarker = "espeak-ng-data/"
                         val espeakIndex = archivePath.indexOf(espeakMarker)
                         val relativeEspeakPath = if (espeakIndex >= 0) {
