@@ -18,21 +18,27 @@ import java.nio.charset.StandardCharsets;
 
 public class GeminiProvider implements AIProvider {
 
-    // Gemini 3.8 Flash: modello attuale con disponibilità nel livello gratuito.
-    // La quota effettiva dipende dal progetto Google e dai limiti applicati.
-    private static final String API_URL =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
-
     private final String apiKey;
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final String modelId;
+    private final String displayName;
 
     public GeminiProvider(String apiKey) {
-        this.apiKey = apiKey;
+        this(apiKey, "gemini-3.8-flash", "Gemini 3.8 Flash");
     }
+
+    public GeminiProvider(String apiKey, String modelId, String displayName) {
+        if (modelId == null || !modelId.matches("[a-zA-Z0-9._-]+")) {
+            throw new IllegalArgumentException("ID modello Gemini non valido.");
+        }
+        this.apiKey = apiKey;
+        this.modelId = modelId;
+        this.displayName = displayName == null ? "Gemini" : displayName;
+    }
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Override
     public String getProviderName() {
-        return "Gemini";
+        return displayName;
     }
 
     @Override
@@ -49,7 +55,8 @@ public class GeminiProvider implements AIProvider {
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {
-                URL url = new URL(API_URL);
+                URL url = new URL("https://generativelanguage.googleapis.com/v1beta/models/"
+                        + modelId + ":generateContent");
                 connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("POST");
                 connection.setConnectTimeout(15000);
