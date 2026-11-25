@@ -31,13 +31,13 @@ public final class AIProviderFactory {
             // fallback automatici che potrebbero inviare dati o creare costi.
             if (hasKey(deepSeekKey)) availableProviders.add(new DeepSeekProvider(deepSeekKey.trim()));
             else if (hasKey(groqKey)) availableProviders.add(new GroqProvider(groqKey.trim()));
-            else if (hasKey(geminiKey)) availableProviders.add(new GeminiProvider(geminiKey.trim()));
+            else if (hasKey(geminiKey)) addGeminiProviders(availableProviders, geminiKey);
         } else if ("DEEPSEEK".equals(selected) && hasKey(deepSeekKey)) {
             availableProviders.add(new DeepSeekProvider(deepSeekKey.trim()));
         } else if ("GROQ".equals(selected) && hasKey(groqKey)) {
             availableProviders.add(new GroqProvider(groqKey.trim()));
         } else if ("GEMINI".equals(selected) && hasKey(geminiKey)) {
-            availableProviders.add(new GeminiProvider(geminiKey.trim()));
+            addGeminiProviders(availableProviders, geminiKey);
         } else if ("OPENAI".equals(selected) && hasKey(openAIKey)) {
             availableProviders.add(new OpenAIProvider(openAIKey.trim()));
         } else if ("GROK".equals(selected) && hasKey(grokKey)) {
@@ -47,6 +47,14 @@ public final class AIProviderFactory {
         AIManager manager = new AIManager();
         manager.setProviders(availableProviders, "AUTO");
         return manager;
+    }
+
+    private static void addGeminiProviders(List<AIProvider> providers, String apiKey) {
+        String key = apiKey.trim();
+        // Entrambi sono modelli conversazionali distinti, sullo stesso progetto/chiave.
+        // L'ordine è intenzionale: Flash è il primario, Hydrogen è il fallback.
+        providers.add(new GeminiProvider(key, "gemini-3.8-flash", "Gemini 3.8 Flash"));
+        providers.add(new GeminiProvider(key, "gemini-4-hydrogen", "Gemini 4 Hydrogen"));
     }
 
     private static boolean hasKey(String key) {
