@@ -26,8 +26,8 @@ public final class AIProviderFactory {
 
         manager.setProvider(new GeminiProvider(
                 geminiKey.trim(),
-                "gemini-3.8-flash",
-                "Gemini 3.8 Flash"
+                "gemini-3.1-flash-lite",
+                "Gemini 3.1 Flash-Lite · gratuito"
         ));
         manager.setPreferredProvider("AUTO");
         return manager;

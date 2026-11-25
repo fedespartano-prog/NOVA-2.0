@@ -23,7 +23,7 @@ public class GeminiProvider implements AIProvider {
     private final String displayName;
 
     public GeminiProvider(String apiKey) {
-        this(apiKey, "gemini-3.8-flash", "Gemini 3.8 Flash");
+        this(apiKey, "gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite · gratuito");
     }
 
     public GeminiProvider(String apiKey, String modelId, String displayName) {

@@ -36,7 +36,9 @@ class PaolaVoiceEngine(private val context: Context) {
 
     fun isInstalled(): Boolean {
         return modelDirectory.listFiles()?.any { it.extension == "onnx" } == true &&
-            File(modelDirectory, "tokens.txt").exists()
+            File(modelDirectory, "tokens.txt").isFile &&
+            File(modelDirectory, "espeak-ng-data").isDirectory &&
+            File(modelDirectory, "espeak-ng-data/it_dict").isFile
     }
 
     fun install(onProgress: (Int) -> Unit, onComplete: (Boolean, String) -> Unit) {
@@ -78,10 +80,28 @@ class PaolaVoiceEngine(private val context: Context) {
                     while (true) {
                         val entry = tar.nextTarEntry ?: break
                         if (entry.isDirectory) continue
-                        val name = entry.name.substringAfterLast('/')
-                        if (name == "tokens.txt" || name.endsWith(".onnx")) {
-                            val output = File(modelDirectory, name)
-                            FileOutputStream(output).use { stream -> tar.copyTo(stream) }
+                        val archivePath = entry.name.replace('\\\\', '/')
+                        val espeakMarker = "espeak-ng-data/"
+                        val espeakIndex = archivePath.indexOf(espeakMarker)
+                        val relativeEspeakPath = if (espeakIndex >= 0) {
+                            archivePath.substring(espeakIndex + espeakMarker.length)
+                        } else {
+                            ""
+                        }
+                        val name = archivePath.substringAfterLast('/')
+                        val isEspeakData = relativeEspeakPath.isNotEmpty()
+                        if (name == "tokens.txt" || name.endsWith(".onnx") || isEspeakData) {
+                            val output = if (isEspeakData) {
+                                File(modelDirectory, "espeak-ng-data/$relativeEspeakPath")
+                            } else {
+                                File(modelDirectory, name)
+                            }
+                            if (entry.isDirectory) {
+                                output.mkdirs()
+                            } else {
+                                output.parentFile?.mkdirs()
+                                FileOutputStream(output).use { stream -> tar.copyTo(stream) }
+                            }
                             if (name == "tokens.txt") foundTokens = true
                             if (name.endsWith(".onnx")) foundModel = true
                         }
@@ -197,7 +217,8 @@ class PaolaVoiceEngine(private val context: Context) {
             val config = getOfflineTtsConfig(
                 modelDir = modelDirectory.absolutePath,
                 modelName = modelFile.name,
-                numThreads = 2
+                dataDir = File(modelDirectory, "espeak-ng-data").absolutePath,
+                numThreads = 1
             )
             return OfflineTts(assetManager = null, config = config).also { tts = it }
         }

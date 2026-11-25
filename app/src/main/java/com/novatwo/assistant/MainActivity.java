@@ -1076,10 +1076,15 @@ public class MainActivity extends FragmentActivity {
             @Override public void onError(String error) {
                 runOnUiThread(() -> {
                     requestInProgress = false;
-                    addChatLine("assistant", "Non sono riuscita a completare la richiesta. " + error);
-                    status.setText("RICHIESTA NON RIUSCITA");
+                    String diagnostic = error == null || error.trim().isEmpty()
+                            ? "Google non ha restituito dettagli sull'errore."
+                            : error.trim();
+                    addChatLine("assistant", "Richiesta Gemini non riuscita.\n" + diagnostic);
+                    status.setText("GEMINI · ERRORE DETTAGLIATO DISPONIBILE");
+                    Toast.makeText(MainActivity.this, diagnostic, Toast.LENGTH_LONG).show();
                     if (orbView != null) orbView.setMode(OrbView.IDLE);
                     setControlsEnabled(true);
+                    if (continuousVoiceMode) resumeVoiceSession();
                 });
             }
         });
