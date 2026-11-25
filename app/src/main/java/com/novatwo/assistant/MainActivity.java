@@ -560,12 +560,18 @@ public class MainActivity extends FragmentActivity {
 
     private void loadAIConfiguration() {
         try {
-            setSpinnerProvider(keyStore.getSelectedProvider());
+            // NOVA in questa versione usa esclusivamente Gemini.
+            // Non leggere le vecchie chiavi degli altri provider: un dato
+            // cifrato non valido di un provider inattivo non deve bloccare Gemini.
+            keyStore.setSelectedProvider("GEMINI");
+            setSpinnerProvider("GEMINI");
             rebuildAIManager();
             updateKeyStatus();
         } catch (Exception e) {
-            status.setText("CONFIGURAZIONE DA COMPLETARE");
-            providerStatus.setText("Errore nel caricamento delle chiavi: " + safeMessage(e));
+            aiManager = new AIManager();
+            status.setText("CONFIGURAZIONE GEMINI DA VERIFICARE");
+            providerStatus.setText("NOVA non riesce a leggere la chiave Gemini salvata: " + safeMessage(e));
+            if (keyStatus != null) keyStatus.setText("Chiave Gemini: lettura non riuscita");
         }
     }
 
@@ -615,15 +621,18 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void rebuildAIManager() throws Exception {
+        // Legge soltanto la chiave Gemini: le altre chiavi già presenti
+        // sul telefono restano intatte ma non partecipano alla configurazione.
+        String geminiKey = keyStore.getKey("GEMINI");
         aiManager = AIProviderFactory.createManager(
-                keyStore.getSelectedProvider(),
-                keyStore.getKey("OPENAI"),
-                keyStore.getKey("DEEPSEEK"),
-                keyStore.getKey("GEMINI"),
-                keyStore.getKey("GROQ"),
-                keyStore.getKey("GROK"));
+                "GEMINI",
+                null,
+                null,
+                geminiKey,
+                null,
+                null);
         AIProvider provider = aiManager.getProvider();
-        String selected = keyStore.getSelectedProvider();
+        String selected = "GEMINI";
         if (provider == null) {
             status.setText("PRONTA · CONFIGURA UN SERVIZIO AI");
             providerStatus.setText("Nessun provider disponibile per la scelta " + selected + ".");
