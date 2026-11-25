@@ -1,5 +1,6 @@
 package com.novatwo.assistant.ai;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,27 +59,73 @@ public class AIManager {
     }
 
     public void sendMessage(String prompt, AIProvider.ResponseCallback callback) {
-        if (callback == null) {
-            return;
-        }
-
+        if (callback == null) return;
         if (prompt == null || prompt.trim().isEmpty()) {
             callback.onError("Il messaggio non può essere vuoto.");
             return;
         }
 
-        AIProvider provider = getProvider();
-        if (provider == null) {
+        List<AIProvider> ordered = new ArrayList<>();
+        if (!"AUTO".equals(preferredProvider)) {
+            AIProvider selected = providers.get(preferredProvider);
+            if (selected != null) ordered.add(selected);
+            if (selected != null && selected.getProviderName().startsWith("Gemini")) {
+                for (AIProvider candidate : providers.values()) {
+                    if (candidate != selected
+                            && candidate.getProviderName().startsWith("Gemini")) {
+                        ordered.add(candidate);
+                    }
+                }
+            }
+        } else {
+            ordered.addAll(providers.values());
+        }
+
+        if (ordered.isEmpty()) {
             callback.onError("Nessun provider configurato. Inserisci almeno una chiave API.");
             return;
         }
+        sendWithGeminiFallback(ordered, 0, prompt.trim(), callback);
+    }
 
-        // Una richiesta viene inviata a un solo provider: evita chiamate
-        // duplicate e possibili addebiti multipli in caso di errore.
+    private void sendWithGeminiFallback(
+            List<AIProvider> ordered,
+            int index,
+            String prompt,
+            AIProvider.ResponseCallback callback) {
+        AIProvider provider = ordered.get(index);
         try {
-            provider.generateResponse(prompt.trim(), callback);
+            provider.generateResponse(prompt, new AIProvider.ResponseCallback() {
+                @Override public void onSuccess(String response) {
+                    callback.onSuccess(response);
+                }
+
+                @Override public void onError(String error) {
+                    boolean isGemini = provider.getProviderName().startsWith("Gemini");
+                    boolean hasNextGemini = index + 1 < ordered.size()
+                            && ordered.get(index + 1).getProviderName().startsWith("Gemini");
+                    boolean retryableModelError = error != null
+                            && (error.contains("HTTP 429")
+                            || error.contains("HTTP 404")
+                            || error.contains("HTTP 503"));
+                    if (isGemini && hasNextGemini && retryableModelError) {
+                        sendWithGeminiFallback(ordered, index + 1, prompt, callback);
+                    } else {
+                        callback.onError(error);
+                    }
+                }
+            });
         } catch (Exception e) {
-            callback.onError("Errore " + provider.getProviderName() + ": " + e.getMessage());
+            String error = "Errore " + provider.getProviderName() + ": " + e.getMessage();
+            boolean isGemini = provider.getProviderName().startsWith("Gemini");
+            boolean hasNextGemini = index + 1 < ordered.size()
+                    && ordered.get(index + 1).getProviderName().startsWith("Gemini");
+            if (isGemini && hasNextGemini) {
+                sendWithGeminiFallback(ordered, index + 1, prompt, callback);
+            } else {
+                callback.onError(error);
+            }
         }
     }
+
 }
