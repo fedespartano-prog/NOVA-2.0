@@ -18,10 +18,10 @@ import java.nio.charset.StandardCharsets;
 
 public class GeminiProvider implements AIProvider {
 
-    // Gemini 2.5 Flash è disponibile nel livello gratuito dell'API
-    // (con limiti e disponibilità che dipendono da progetto e regione).
+    // Gemini 3.8 Flash: modello attuale con disponibilità nel livello gratuito.
+    // La quota effettiva dipende dal progetto Google e dai limiti applicati.
     private static final String API_URL =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
 
     private final String apiKey;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -86,9 +86,18 @@ public class GeminiProvider implements AIProvider {
                 }
 
                 if (status < 200 || status >= 300) {
-                    String error = response.toString();
-                    mainHandler.post(() -> callback.onError(
-                            "Errore Gemini HTTP " + status + ": " + error));
+                    String detail = response.toString();
+                    final String message;
+                    if (status == 404) {
+                        message = "Gemini non trova o non abilita il modello richiesto per questo progetto (HTTP 404). Controllare il modello disponibile nel progetto Google AI Studio. Dettaglio: " + detail;
+                    } else if (status == 429) {
+                        message = "Limite o quota Gemini raggiunti (HTTP 429). NOVA non riproverà automaticamente e non passerà a servizi a pagamento. Attendi il ripristino della quota gratuita. Dettaglio: " + detail;
+                    } else if (status == 401 || status == 403) {
+                        message = "Google ha rifiutato la chiave o l'accesso al progetto Gemini (HTTP " + status + "). Verifica autorizzazioni e progetto associato. Dettaglio: " + detail;
+                    } else {
+                        message = "Errore Gemini HTTP " + status + ": " + detail;
+                    }
+                    mainHandler.post(() -> callback.onError(message));
                     return;
                 }
 
