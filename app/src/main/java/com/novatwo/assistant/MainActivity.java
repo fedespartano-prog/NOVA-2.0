@@ -72,6 +72,7 @@ public class MainActivity extends FragmentActivity {
     private AIManager aiManager;
     private SpeechRecognizer recognizer;
     private TextToSpeech textToSpeech;
+    private PaolaVoiceBridge paolaVoice;
     private Button continuousVoiceButton;
     private boolean continuousVoiceMode = false;
 
@@ -111,6 +112,7 @@ public class MainActivity extends FragmentActivity {
 
         keyStore = new APIKeyStore(this);
         memory = new ConversationMemory(this);
+        paolaVoice = new PaolaVoiceBridge(getApplicationContext());
         continuousVoiceMode = getSharedPreferences("nova_voice", MODE_PRIVATE)
                 .getBoolean("continuous", false);
 
@@ -382,9 +384,27 @@ public class MainActivity extends FragmentActivity {
         appearanceButton.setOnClickListener(v -> chooseAppearance());
 
 
-        TextView voiceSecurityInfo = label("RISPOSTE VOCALI: NOVA legge le risposte in italiano usando la voce installata sul telefono. La disponibilità e la qualità dipendono dal motore vocale Android.", 10, MUTED, false);
+        TextView voiceSecurityInfo = label("VOCE ITALIANA PAOLA: scaricabile una sola volta e utilizzabile offline. Se non è installata, NOVA usa la voce italiana disponibile sul telefono.", 10, MUTED, false);
         voiceSecurityInfo.setPadding(0, dp(8), 0, dp(4));
         settingsPanel.addView(voiceSecurityInfo, matchWidth());
+
+        Button installPaolaButton = new Button(this);
+        installPaolaButton.setText(paolaVoice.isInstalled() ? "VOCE PAOLA INSTALLATA" : "INSTALLA VOCE PAOLA · 21 MB");
+        styleButton(installPaolaButton, false);
+        settingsPanel.addView(installPaolaButton, fullButtonParams());
+        installPaolaButton.setOnClickListener(v -> installPaolaVoice(installPaolaButton));
+
+        Button testPaolaButton = new Button(this);
+        testPaolaButton.setText("PROVA VOCE PAOLA");
+        styleButton(testPaolaButton, false);
+        settingsPanel.addView(testPaolaButton, fullButtonParams());
+        testPaolaButton.setOnClickListener(v -> {
+            if (paolaVoice.isInstalled()) {
+                speak("Ciao, sono NOVA. Questa è la mia voce italiana Paola.");
+            } else {
+                Toast.makeText(this, "Installa prima la voce Paola.", Toast.LENGTH_SHORT).show();
+            }
+        });
 
         continuousVoiceButton = new Button(this);
         updateContinuousVoiceButton();
@@ -769,6 +789,7 @@ public class MainActivity extends FragmentActivity {
                 if (com.novatwo.assistant.voice.NovaVoiceService.ACTION_USER_SPEECH.equals(action)) {
                     if (orbView != null) orbView.setMode(OrbView.LISTENING);
                     if (textToSpeech != null && textToSpeech.isSpeaking()) textToSpeech.stop();
+                    if (paolaVoice != null) paolaVoice.stop();
                     return;
                 }
                 if (com.novatwo.assistant.voice.NovaVoiceService.ACTION_TRANSCRIPT.equals(action)) {
@@ -807,6 +828,8 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void stopVoiceSession() {
+        if (paolaVoice != null) paolaVoice.stop();
+        if (textToSpeech != null) textToSpeech.stop();
         Intent intent = new Intent(this, com.novatwo.assistant.voice.NovaVoiceService.class);
         intent.setAction(com.novatwo.assistant.voice.NovaVoiceService.ACTION_STOP);
         try { startService(intent); } catch (Exception ignored) { }
@@ -881,6 +904,8 @@ public class MainActivity extends FragmentActivity {
 
     private void startListening() {
         if (requestInProgress) return;
+        if (paolaVoice != null) paolaVoice.stop();
+        if (textToSpeech != null) textToSpeech.stop();
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             continuousVoiceMode = false;
             getSharedPreferences("nova_voice", MODE_PRIVATE).edit().putBoolean("continuous", false).apply();
@@ -1166,9 +1191,66 @@ public class MainActivity extends FragmentActivity {
                 .trim();
     }
 
+    private void installPaolaVoice(Button button) {
+        if (paolaVoice.isInstalled()) {
+            Toast.makeText(this, "La voce Paola è già installata e funziona offline.", Toast.LENGTH_LONG).show();
+            button.setText("VOCE PAOLA INSTALLATA");
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Installa la voce italiana Paola")
+                .setMessage("Scaricherò circa 21 MB una sola volta. Dopo l'installazione la sintesi vocale funziona offline. Il download usa Internet e può consumare i tuoi giga: se preferisci, fallo sotto Wi-Fi. Non richiede abbonamenti.")
+                .setNegativeButton("ANNULLA", null)
+                .setPositiveButton("SCARICA", (dialog, which) -> {
+                    button.setEnabled(false);
+                    button.setText("DOWNLOAD 0%");
+                    paolaVoice.install(new PaolaVoiceBridge.InstallListener() {
+                        @Override public void onProgress(int percent) {
+                            runOnUiThread(() -> button.setText("DOWNLOAD " + percent + "%"));
+                        }
+                        @Override public void onComplete(boolean success, String message) {
+                            runOnUiThread(() -> {
+                                button.setEnabled(true);
+                                button.setText(success ? "VOCE PAOLA INSTALLATA" : "RIPROVA INSTALLAZIONE");
+                                Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+                            });
+                        }
+                    });
+                }).show();
+    }
+
     private void speak(String message) {
         String spokenText = cleanTextForSpeech(message);
-        if (ttsReady && textToSpeech != null && !spokenText.trim().isEmpty()) {
+        if (spokenText.trim().isEmpty()) return;
+        if (paolaVoice != null && paolaVoice.isInstalled()) {
+            if (textToSpeech != null) textToSpeech.stop();
+            paolaVoice.speak(spokenText, new PaolaVoiceBridge.SpeechListener() {
+                @Override public void onStarted() {
+                    runOnUiThread(() -> {
+                        if (orbView != null) orbView.setMode(OrbView.SPEAKING);
+                        status.setText("NOVA STA PARLANDO · PUOI INTERROMPERE CON IL PULSANTE STOP");
+                    });
+                }
+                @Override public void onFinished() {
+                    runOnUiThread(() -> {
+                        if (orbView != null) orbView.setMode(continuousVoiceMode ? OrbView.LISTENING : OrbView.IDLE);
+                        if (continuousVoiceMode && !requestInProgress) resumeVoiceSession();
+                    });
+                }
+                @Override public void onError(String message) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(MainActivity.this, "Voce Paola non disponibile: " + message, Toast.LENGTH_LONG).show();
+                        if (ttsReady && textToSpeech != null) {
+                            textToSpeech.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, "nova_response_fallback");
+                        } else if (continuousVoiceMode && !requestInProgress) {
+                            resumeVoiceSession();
+                        }
+                    });
+                }
+            });
+            return;
+        }
+        if (ttsReady && textToSpeech != null) {
             if (orbView != null) orbView.setMode(OrbView.SPEAKING);
             textToSpeech.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, "nova_response");
         } else {
@@ -1215,6 +1297,10 @@ public class MainActivity extends FragmentActivity {
             textToSpeech.stop();
             textToSpeech.shutdown();
             textToSpeech = null;
+        }
+        if (paolaVoice != null) {
+            paolaVoice.release();
+            paolaVoice = null;
         }
         super.onDestroy();
     }
