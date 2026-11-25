@@ -62,7 +62,7 @@ public class AIManager {
 
         AIProvider provider = getProvider();
         if (provider == null) {
-            callback.onError("Gemini non configurato. Inserisci la chiave API Gemini.");
+            callback.onError("Il provider selezionato non è configurato. Inserisci la relativa chiave API nelle impostazioni.");
             return;
         }
 
