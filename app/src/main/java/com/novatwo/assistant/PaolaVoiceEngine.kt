@@ -170,6 +170,10 @@ class PaolaVoiceEngine(private val context: Context) {
                     .setBufferSizeInBytes(maxOf(minBuffer, sampleRate / 2 * 4))
                     .setTransferMode(AudioTrack.MODE_STREAM)
                     .build()
+                if (track.state != AudioTrack.STATE_INITIALIZED) {
+                    track.release()
+                    throw IllegalStateException("AudioTrack non inizializzato sul dispositivo")
+                }
                 audioTrack = track
                 track.play()
                 onStarted()
@@ -195,6 +199,15 @@ class PaolaVoiceEngine(private val context: Context) {
                 track.release()
                 audioTrack = null
                 onFinished()
+            } catch (e: LinkageError) {
+                audioTrack?.let {
+                    try { it.pause() } catch (_: Exception) {}
+                    try { it.flush() } catch (_: Exception) {}
+                    try { it.release() } catch (_: Exception) {}
+                }
+                audioTrack = null
+                onError("Libreria nativa Sherpa/Piper non caricabile: " +
+                    (e.message ?: e.javaClass.simpleName))
             } catch (e: Exception) {
                 audioTrack?.let {
                     try { it.pause() } catch (_: Exception) {}
