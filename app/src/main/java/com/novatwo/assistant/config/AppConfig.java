@@ -14,9 +14,9 @@ public final class AppConfig {
     public static final String CORE_PACKAGE =
             "com.novatwo.assistant.core";
 
-    public static final boolean DEBUG_MODE = true;
+    public static final boolean DEBUG_MODE = false;
 
-    public static final String AI_PROVIDER = "OPENAI";
+    public static final String AI_PROVIDER = "GEMINI";
 
     public static final boolean REQUIRE_PERMISSION_FOR_ACTIONS = true;
 

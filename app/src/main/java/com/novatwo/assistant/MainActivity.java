@@ -12,6 +12,11 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.IntentFilter;
 import android.net.Uri;
+import android.media.AudioRecord;
+import android.media.AudioFormat;
+import android.media.MediaRecorder;
+import android.media.audiofx.AcousticEchoCanceler;
+import android.media.audiofx.NoiseSuppressor;
 import com.novatwo.assistant.actions.PhoneActionRouter;
 import android.content.pm.PackageManager;
 import android.graphics.Canvas;
@@ -49,6 +54,8 @@ import com.novatwo.assistant.ai.AIProvider;
 import com.novatwo.assistant.ai.AIProviderFactory;
 import com.novatwo.assistant.config.APIKeyStore;
 import com.novatwo.assistant.memory.ConversationMemory;
+import com.novatwo.assistant.network.NetworkConnectionManager;
+import com.novatwo.assistant.network.NetworkRequestGuard;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -66,6 +73,9 @@ public class MainActivity extends FragmentActivity {
     private static final int GREEN = Color.rgb(0, 190, 255);
     private static final int VIOLET = Color.rgb(65, 205, 255);
     private static final int MUTED = Color.rgb(139, 151, 163);
+    private static final int BARGE_IN_SAMPLE_RATE = 16000;
+    private static final double BARGE_IN_RMS_THRESHOLD = 0.035;
+    private static final int BARGE_IN_REQUIRED_FRAMES = 3;
 
     private APIKeyStore keyStore;
     private ConversationMemory memory;
@@ -95,6 +105,8 @@ public class MainActivity extends FragmentActivity {
     private boolean ttsReady;
     private boolean requestInProgress;
     private boolean recognitionActive = false;
+    private volatile boolean bargeInActive = false;
+    private Thread bargeInThread;
     private BroadcastReceiver voiceReceiver;
     private boolean voiceReceiverRegistered = false;
     private LinearLayout mainRoot;
@@ -761,15 +773,20 @@ public class MainActivity extends FragmentActivity {
                 }
                 textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String utteranceId) {
-                        runOnUiThread(() -> { if (orbView != null) orbView.setMode(OrbView.SPEAKING); });
+                        runOnUiThread(() -> {
+                            if (orbView != null) orbView.setMode(OrbView.SPEAKING);
+                            startBargeInMonitor();
+                        });
                     }
                     @Override public void onDone(String utteranceId) {
+                        stopBargeInMonitor();
                         runOnUiThread(() -> {
                             if (orbView != null) orbView.setMode(continuousVoiceMode ? OrbView.LISTENING : OrbView.IDLE);
                             if (continuousVoiceMode && !requestInProgress) resumeVoiceSession();
                         });
                     }
                     @Override public void onError(String utteranceId) {
+                        stopBargeInMonitor();
                         runOnUiThread(() -> {
                             if (orbView != null) orbView.setMode(OrbView.IDLE);
                             if (continuousVoiceMode && !requestInProgress && !recognitionActive) startListening();
@@ -828,6 +845,7 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void stopVoiceSession() {
+        stopBargeInMonitor();
         if (paolaVoice != null) paolaVoice.stop();
         if (textToSpeech != null) textToSpeech.stop();
         Intent intent = new Intent(this, com.novatwo.assistant.voice.NovaVoiceService.class);
@@ -904,6 +922,7 @@ public class MainActivity extends FragmentActivity {
 
     private void startListening() {
         if (requestInProgress) return;
+        stopBargeInMonitor();
         if (paolaVoice != null) paolaVoice.stop();
         if (textToSpeech != null) textToSpeech.stop();
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
@@ -986,7 +1005,10 @@ public class MainActivity extends FragmentActivity {
                         + (requiresPerRequestConsent
                         ? "ATTENZIONE: questo servizio API può addebitare i token o il consumo al tuo account, in base al piano e al credito disponibili. Questa singola richiesta partirà solo dopo la tua conferma. NOVA ti chiederà conferma ogni volta."
                         : "Confermando, NOVA ricorderà l'autorizzazione Groq. Verifica di usare il piano gratuito e non attivare crediti o pagamenti.")
-                        + " NOVA non passa automaticamente ad altri provider.")
+                        + " NOVA non passa automaticamente ad altri provider."
+                        + (NetworkConnectionManager.isUsingMobileData(this)
+                        ? "\n\nATTENZIONE: stai usando i dati mobili; questa richiesta consumerà traffico dati."
+                        : ""))
                 .setNegativeButton("ANNULLA", (dialog, which) -> {
                     status.setText("INVIO ANNULLATO");
                     setControlsEnabled(true);
@@ -1024,13 +1046,23 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void sendConfirmedAIMessage(String message, AIProvider active) {
+        String finalPrompt = applyPersonality(buildConversationPrompt(message));
+        NetworkRequestGuard.Decision networkDecision = NetworkRequestGuard.check(this, finalPrompt);
+        if (networkDecision != NetworkRequestGuard.Decision.ALLOWED) {
+            String reason = NetworkRequestGuard.getMessage(networkDecision);
+            status.setText(reason.toUpperCase(Locale.ROOT));
+            Toast.makeText(this, reason, Toast.LENGTH_LONG).show();
+            setControlsEnabled(true);
+            if (continuousVoiceMode) resumeVoiceSession();
+            return;
+        }
         requestInProgress = true;
         setControlsEnabled(false);
         addChatLine("user", message);
         memory.saveMessage("user", message);
         status.setText("NOVA STA PENSANDO · " + active.getProviderName().toUpperCase(Locale.ROOT));
         if (orbView != null) orbView.setMode(OrbView.THINKING);
-        aiManager.sendMessage(applyPersonality(buildConversationPrompt(message)), new AIProvider.ResponseCallback() {
+        aiManager.sendMessage(finalPrompt, new AIProvider.ResponseCallback() {
             @Override public void onSuccess(String response) {
                 runOnUiThread(() -> {
                     requestInProgress = false;
@@ -1219,6 +1251,107 @@ public class MainActivity extends FragmentActivity {
                 }).show();
     }
 
+    private void startBargeInMonitor() {
+        if (bargeInActive || isFinishing() || isDestroyed()) return;
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return;
+
+        int minBuffer = AudioRecord.getMinBufferSize(
+                BARGE_IN_SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT);
+        if (minBuffer <= 0) return;
+
+        bargeInActive = true;
+        Thread worker = new Thread(() -> {
+            AudioRecord recorder = null;
+            AcousticEchoCanceler echoCanceler = null;
+            NoiseSuppressor noiseSuppressor = null;
+            boolean detected = false;
+            try {
+                recorder = new AudioRecord(
+                        MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                        BARGE_IN_SAMPLE_RATE,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        Math.max(minBuffer, BARGE_IN_SAMPLE_RATE / 5));
+                if (recorder.getState() != AudioRecord.STATE_INITIALIZED) {
+                    throw new IllegalStateException("AudioRecord non inizializzato");
+                }
+
+                int sessionId = recorder.getAudioSessionId();
+                if (AcousticEchoCanceler.isAvailable()) {
+                    echoCanceler = AcousticEchoCanceler.create(sessionId);
+                    if (echoCanceler != null) echoCanceler.setEnabled(true);
+                }
+                if (NoiseSuppressor.isAvailable()) {
+                    noiseSuppressor = NoiseSuppressor.create(sessionId);
+                    if (noiseSuppressor != null) noiseSuppressor.setEnabled(true);
+                }
+
+                short[] samples = new short[BARGE_IN_SAMPLE_RATE / 10];
+                int voiceFrames = 0;
+                recorder.startRecording();
+                while (bargeInActive && !Thread.currentThread().isInterrupted()) {
+                    int count = recorder.read(samples, 0, samples.length);
+                    if (count < 0) break;
+                    if (count == 0) continue;
+                    double sumSquares = 0.0;
+                    for (int i = 0; i < count; i++) {
+                        double value = samples[i] / 32768.0;
+                        sumSquares += value * value;
+                    }
+                    double rms = Math.sqrt(sumSquares / count);
+                    if (rms >= BARGE_IN_RMS_THRESHOLD) {
+                        voiceFrames++;
+                        if (voiceFrames >= BARGE_IN_REQUIRED_FRAMES) {
+                            detected = true;
+                            break;
+                        }
+                    } else {
+                        voiceFrames = 0;
+                    }
+                }
+            } catch (SecurityException ignored) {
+                // Il permesso potrebbe essere stato revocato durante la sintesi.
+            } catch (Exception ignored) {
+                // Se il dispositivo non supporta il monitoraggio, resta disponibile lo stop manuale.
+            } finally {
+                bargeInActive = false;
+                if (recorder != null) {
+                    try { recorder.stop(); } catch (Exception ignored) { }
+                    try { recorder.release(); } catch (Exception ignored) { }
+                }
+                if (echoCanceler != null) {
+                    try { echoCanceler.release(); } catch (Exception ignored) { }
+                }
+                if (noiseSuppressor != null) {
+                    try { noiseSuppressor.release(); } catch (Exception ignored) { }
+                }
+            }
+
+            if (detected) {
+                runOnUiThread(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        if (paolaVoice != null) paolaVoice.stop();
+                        if (textToSpeech != null) textToSpeech.stop();
+                        status.setText("TI HO SENTITO · PUOI PARLARE");
+                        startListening();
+                    }
+                });
+            }
+        }, "NOVA-BargeIn");
+        worker.setDaemon(true);
+        bargeInThread = worker;
+        worker.start();
+    }
+
+    private void stopBargeInMonitor() {
+        bargeInActive = false;
+        Thread worker = bargeInThread;
+        bargeInThread = null;
+        if (worker != null) worker.interrupt();
+    }
+
     private void speak(String message) {
         String spokenText = cleanTextForSpeech(message);
         if (spokenText.trim().isEmpty()) return;
@@ -1228,16 +1361,19 @@ public class MainActivity extends FragmentActivity {
                 @Override public void onStarted() {
                     runOnUiThread(() -> {
                         if (orbView != null) orbView.setMode(OrbView.SPEAKING);
-                        status.setText("NOVA STA PARLANDO · PUOI INTERROMPERE CON IL PULSANTE STOP");
+                        status.setText("NOVA STA PARLANDO · PUOI INTERROMPERMI PARLANDO");
+                        startBargeInMonitor();
                     });
                 }
                 @Override public void onFinished() {
+                    stopBargeInMonitor();
                     runOnUiThread(() -> {
                         if (orbView != null) orbView.setMode(continuousVoiceMode ? OrbView.LISTENING : OrbView.IDLE);
                         if (continuousVoiceMode && !requestInProgress) resumeVoiceSession();
                     });
                 }
                 @Override public void onError(String message) {
+                    stopBargeInMonitor();
                     runOnUiThread(() -> {
                         Toast.makeText(MainActivity.this, "Voce Paola non disponibile: " + message, Toast.LENGTH_LONG).show();
                         if (ttsReady && textToSpeech != null) {
@@ -1284,6 +1420,7 @@ public class MainActivity extends FragmentActivity {
     @Override
     protected void onDestroy() {
         recognitionActive = false;
+        stopBargeInMonitor();
         if (voiceReceiverRegistered && voiceReceiver != null) {
             try { unregisterReceiver(voiceReceiver); } catch (Exception ignored) { }
             voiceReceiverRegistered = false;

@@ -16,6 +16,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = 'NOVA'
+rootProject.name = 'NOVA-2.0'
 
 include ':app'
