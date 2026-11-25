@@ -325,7 +325,7 @@ public class MainActivity extends FragmentActivity {
             }
         });
 
-        TextView providerLine = label("AI · GEMINI", 10, MUTED, false);
+        TextView providerLine = label("AI · GROQ", 10, MUTED, false);
         providerLine.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams providerParams = wrap();
         providerParams.topMargin = dp(13);
@@ -343,21 +343,25 @@ public class MainActivity extends FragmentActivity {
         settingsPanel.addView(providerStatus, matchWidth());
 
         providerSpinner = new Spinner(this);
-        String[] providers = {"GEMINI · UNICO PROVIDER ATTIVO"};
+        String[] providers = {"GROQ · TEST GRATUITO SE DISPONIBILE", "GEMINI"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, providers);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         providerSpinner.setAdapter(adapter);
+        providerSpinner.setSelection(0);
         settingsPanel.addView(providerSpinner, matchWidth());
 
         keyStatus = label("Le chiavi salvate sono protette sul dispositivo.", 10, MUTED, false);
         keyStatus.setPadding(0, dp(8), 0, dp(3));
         settingsPanel.addView(keyStatus, matchWidth());
 
-        geminiInput = createKeyInput("Incolla qui la chiave API Gemini");
+        groqInput = createKeyInput("Incolla qui la chiave API Groq");
+        settingsPanel.addView(groqInput, matchWidth());
+
+        geminiInput = createKeyInput("Chiave API Gemini (facoltativa)");
         settingsPanel.addView(geminiInput, matchWidth());
 
-        TextView keyHint = label("NOVA usa soltanto Gemini. La chiave resta salvata in modo protetto sul telefono.", 10,
+        TextView keyHint = label("Per questa prova NOVA usa soltanto Groq. La chiave viene salvata cifrata sul telefono; Gemini resta disponibile come alternativa selezionabile.", 10,
                 MUTED, false);
         settingsPanel.addView(keyHint, matchWidth());
 
@@ -589,21 +593,26 @@ public class MainActivity extends FragmentActivity {
             // NOVA in questa versione usa esclusivamente Gemini.
             // Non leggere le vecchie chiavi degli altri provider: un dato
             // cifrato non valido di un provider inattivo non deve bloccare Gemini.
-            keyStore.setSelectedProvider("GEMINI");
-            setSpinnerProvider("GEMINI");
+            String selected = keyStore.getSelectedProvider();
+            if (selected == null || selected.trim().isEmpty() || "AUTO".equalsIgnoreCase(selected)) {
+                selected = "GROQ";
+            }
+            setSpinnerProvider(selected);
             rebuildAIManager();
             updateKeyStatus();
         } catch (Exception e) {
             aiManager = new AIManager();
-            status.setText("CONFIGURAZIONE GEMINI DA VERIFICARE");
-            providerStatus.setText("NOVA non riesce a leggere la chiave Gemini salvata: " + safeMessage(e));
-            if (keyStatus != null) keyStatus.setText("Chiave Gemini: lettura non riuscita");
+            status.setText("CONFIGURAZIONE GROQ DA VERIFICARE");
+            providerStatus.setText("NOVA non riesce a leggere la configurazione AI: " + safeMessage(e));
+            if (keyStatus != null) keyStatus.setText("Chiavi AI: lettura non riuscita");
         }
     }
 
     private void updateKeyStatus() throws Exception {
+        boolean groq = hasKey("GROQ");
         boolean gemini = hasKey("GEMINI");
-        keyStatus.setText("Chiave Gemini sul telefono: " + (gemini ? "SALVATA" : "NON SALVATA"));
+        keyStatus.setText("Groq: " + (groq ? "SALVATA" : "NON SALVATA")
+                + "  ·  Gemini: " + (gemini ? "SALVATA" : "NON SALVATA"));
     }
 
     private String yesNo(boolean value) {
@@ -616,27 +625,32 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void setSpinnerProvider(String provider) {
-        if (providerSpinner != null) providerSpinner.setSelection(0);
+        if (providerSpinner == null) return;
+        providerSpinner.setSelection("GEMINI".equalsIgnoreCase(provider) ? 1 : 0);
     }
 
     private String selectedProvider() {
+        if (providerSpinner == null || providerSpinner.getSelectedItemPosition() == 0) return "GROQ";
         return "GEMINI";
     }
 
     private void saveAIConfiguration() {
         try {
+            saveIfProvided("GROQ", groqInput);
             saveIfProvided("GEMINI", geminiInput);
-            keyStore.setSelectedProvider("GEMINI");
-            String savedKey = keyStore.getKey("GEMINI");
+            String selected = selectedProvider();
+            keyStore.setSelectedProvider(selected);
+            String savedKey = keyStore.getKey(selected);
             if (savedKey == null || savedKey.trim().isEmpty()) {
-                throw new IllegalStateException("La chiave Gemini non risulta salvata sul telefono.");
+                throw new IllegalStateException("La chiave API " + selected + " non risulta salvata sul telefono.");
             }
+            groqInput.setText("");
             geminiInput.setText("");
             rebuildAIManager();
             updateKeyStatus();
-            Toast.makeText(this, "Chiave Gemini salvata e riletta correttamente sul telefono.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Chiave " + selected + " salvata e riletta correttamente sul telefono.", Toast.LENGTH_LONG).show();
         } catch (Exception e) {
-            Toast.makeText(this, "Salvataggio Gemini non riuscito: " + safeMessage(e),
+            Toast.makeText(this, "Salvataggio AI non riuscito: " + safeMessage(e),
                     Toast.LENGTH_LONG).show();
         }
     }
@@ -647,21 +661,16 @@ public class MainActivity extends FragmentActivity {
     }
 
     private void rebuildAIManager() throws Exception {
-        // Legge soltanto la chiave Gemini: le altre chiavi già presenti
-        // sul telefono restano intatte ma non partecipano alla configurazione.
-        String geminiKey = keyStore.getKey("GEMINI");
+        // In questa build di prova viene interrogato esclusivamente il provider scelto.
+        String selected = selectedProvider();
+        String groqKey = "GROQ".equals(selected) ? keyStore.getKey("GROQ") : null;
+        String geminiKey = "GEMINI".equals(selected) ? keyStore.getKey("GEMINI") : null;
         aiManager = AIProviderFactory.createManager(
-                "GEMINI",
-                null,
-                null,
-                geminiKey,
-                null,
-                null);
+                selected, null, null, geminiKey, groqKey, null);
         AIProvider provider = aiManager.getProvider();
-        String selected = "GEMINI";
         if (provider == null) {
-            status.setText("PRONTA · CONFIGURA UN SERVIZIO AI");
-            providerStatus.setText("Nessun provider disponibile per la scelta " + selected + ".");
+            status.setText("PRONTA · CONFIGURA " + selected);
+            providerStatus.setText("Nessuna chiave disponibile per " + selected + ". Nessun fallback automatico.");
         } else {
             status.setText("PRONTA · " + provider.getProviderName().toUpperCase(Locale.ROOT));
             providerStatus.setText("Provider attivo: " + provider.getProviderName()
